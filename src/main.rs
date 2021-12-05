@@ -31,9 +31,43 @@ fn day1(part: Part) {
     }
 }
 
+fn day2(part: Part) {
+    let navigational_commands = include_str!("day2_input.txt");
+    let mut horizontal_pos = 0;
+    let mut depth = 0;
+    let mut aim = 0;
+
+    for command in navigational_commands.lines() {
+        let (command, arg) = command.split_once(' ').unwrap();
+        let arg: i64 = arg.parse().unwrap();
+
+        match part {
+            Part::One => match command {
+                "forward" => horizontal_pos += arg,
+                "down" => depth += arg,
+                "up" => depth -= arg, // what happens if the depth turns out negative?
+                _ => unreachable!(),
+            },
+            Part::Two => match command {
+                "forward" => {
+                    horizontal_pos += arg;
+                    depth += aim * arg;
+                }
+                "down" => aim += arg,
+                "up" => aim -= arg,
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    println!("{}", horizontal_pos * depth);
+}
+
 fn main() {
     if false {
         day1(Part::One);
+        day1(Part::Two);
+        day2(Part::One);
     }
-    day1(Part::Two);
+    day2(Part::Two);
 }
