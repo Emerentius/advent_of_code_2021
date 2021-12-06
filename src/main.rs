@@ -1,5 +1,4 @@
 #![feature(drain_filter)]
-use std::cmp::{max, min};
 
 use itertools::Itertools;
 
@@ -252,19 +251,26 @@ impl Line {
         }
     }
 
-    fn iter(&self) -> Box<dyn Iterator<Item = (i64, i64)>> {
-        assert!(self.is_horizontal() || self.is_vertical());
-        if self.is_horizontal() {
-            let y = self.start.1;
-            let x1 = self.start.0;
-            let x2 = self.end.0;
-            Box::new((min(x1, x2)..=max(x1, x2)).map(move |x| (x, y)))
-        } else {
-            let x = self.start.0;
-            let y1 = self.start.1;
-            let y2 = self.end.1;
-            Box::new((min(y1, y2)..=max(y1, y2)).map(move |y| (x, y)))
-        }
+    fn iter(&self) -> impl Iterator<Item = (i64, i64)> + '_ {
+        let step_x = self.end.0.cmp(&self.start.0) as i64;
+        let step_y = self.end.1.cmp(&self.start.1) as i64;
+
+        let mut current_point = self.start;
+        let mut last_reached = false;
+
+        std::iter::from_fn(move || {
+            if last_reached {
+                return None;
+            }
+
+            let last_point = current_point;
+            current_point.0 += step_x;
+            current_point.1 += step_y;
+            if last_point == self.end {
+                last_reached = true;
+            }
+            Some(last_point)
+        })
     }
 
     fn is_horizontal(&self) -> bool {
@@ -289,7 +295,9 @@ fn day5(part: Part) {
 
     let mut map = vec![0; (n_cols * n_rows) as usize];
 
-    lines.retain(|line| line.is_horizontal() || line.is_vertical());
+    if part == Part::One {
+        lines.retain(|line| line.is_horizontal() || line.is_vertical());
+    }
 
     let idx = |x, y| (y * n_cols + x) as usize;
 
@@ -327,6 +335,7 @@ fn main() {
         day3(Part::Two);
         day4(Part::One);
         day4(Part::Two);
+        day5(Part::One);
     }
-    day5(Part::One);
+    day5(Part::Two);
 }
