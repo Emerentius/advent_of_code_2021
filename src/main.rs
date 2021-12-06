@@ -144,6 +144,74 @@ fn day3(part: Part) {
     }
 }
 
+fn parse_num(num: &str) -> i64 {
+    num.parse().unwrap()
+}
+
+struct BingoBoard {
+    nums: Vec<i64>,
+    marked: [bool; 25],
+}
+
+impl BingoBoard {
+    fn parse(board: &str) -> Self {
+        Self {
+            nums: board.split_whitespace().map(parse_num).collect(),
+            marked: [false; 25],
+        }
+    }
+
+    // mark field if the number is part of the board
+    // and return the score of the board if it wins because of it
+    fn mark_num(&mut self, num: i64) -> Option<i64> {
+        if let Some((idx, _)) = self
+            .nums
+            .iter()
+            .enumerate()
+            .find(|(_, board_num)| num == **board_num)
+        {
+            self.marked[idx] = true;
+
+            if self.is_bingo() {
+                let sum_unmarked: i64 = self
+                    .nums
+                    .iter()
+                    .zip(self.marked)
+                    .filter(|(_, marked)| !*marked)
+                    .map(|(num, _)| num)
+                    .sum();
+                return Some(num * sum_unmarked);
+            }
+        }
+        None
+    }
+
+    fn is_bingo(&self) -> bool {
+        (0..5).any(|row| (5 * row..5 * row + 5).all(|idx| self.marked[idx]))
+            || (0..5).any(|col| (col..25).step_by(5).all(|idx| self.marked[idx]))
+    }
+}
+
+fn day4(part: Part) {
+    let input = include_str!("day4_input.txt");
+    //let input = include_str!("day4_test_input.txt");
+    let (all_nums, fields) = input.split_once("\n").unwrap();
+    let all_nums = all_nums.split(',').map(parse_num).collect::<Vec<_>>();
+    let mut boards = fields
+        .split("\n\n")
+        .map(BingoBoard::parse)
+        .collect::<Vec<_>>();
+
+    'outer: for num in all_nums {
+        for board in boards.iter_mut() {
+            if let Some(winning_score) = board.mark_num(num) {
+                println!("{}", winning_score);
+                break 'outer;
+            }
+        }
+    }
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -151,6 +219,7 @@ fn main() {
         day2(Part::One);
         day2(Part::Two);
         day3(Part::One);
+        day3(Part::Two);
     }
-    day3(Part::Two);
+    day4(Part::One);
 }
