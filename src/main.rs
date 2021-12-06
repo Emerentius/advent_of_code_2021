@@ -325,6 +325,26 @@ fn day5(part: Part) {
     println!("{}", map.iter().filter(|&&num| num > 1).count());
 }
 
+fn day6(part: Part) {
+    let input = include_str!("day6_input.txt");
+    let mut fish_population_by_age = [0u128; 9];
+    for age in input.trim().split(',').map(parse_num) {
+        fish_population_by_age[age as usize] += 1;
+    }
+
+    let n_days = match part {
+        Part::One => 80,
+        Part::Two => 256,
+    };
+
+    for _ in 0..n_days {
+        fish_population_by_age.rotate_left(1);
+        fish_population_by_age[6] += fish_population_by_age[8];
+    }
+
+    println!("{}", fish_population_by_age.iter().sum::<u128>());
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -336,6 +356,8 @@ fn main() {
         day4(Part::One);
         day4(Part::Two);
         day5(Part::One);
+        day5(Part::Two);
+        day6(Part::One);
     }
-    day5(Part::Two);
+    day6(Part::Two);
 }
