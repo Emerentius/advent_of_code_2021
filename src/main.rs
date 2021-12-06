@@ -1,3 +1,4 @@
+#![feature(drain_filter)]
 use itertools::Itertools;
 
 #[derive(PartialEq, Eq)]
@@ -202,12 +203,30 @@ fn day4(part: Part) {
         .map(BingoBoard::parse)
         .collect::<Vec<_>>();
 
-    'outer: for num in all_nums {
-        for board in boards.iter_mut() {
-            if let Some(winning_score) = board.mark_num(num) {
-                println!("{}", winning_score);
-                break 'outer;
+    match part {
+        Part::One => {
+            'outer: for num in all_nums {
+                for board in boards.iter_mut() {
+                    if let Some(winning_score) = board.mark_num(num) {
+                        println!("{}", winning_score);
+                        break 'outer;
+                    }
+                }
             }
+        }
+        Part::Two => {
+            // assuming all boards win eventually
+            let mut nums = all_nums.iter();
+            for &num in nums.by_ref() {
+                // .retain() doesn't give us an &mut
+                boards.drain_filter(|board| board.mark_num(num).is_some());
+                if boards.len() == 1 {
+                    break;
+                }
+            }
+            let mut last_board = boards.into_iter().next().unwrap();
+            let score = nums.find_map(|num| last_board.mark_num(*num)).unwrap();
+            println!("{}", score);
         }
     }
 }
@@ -220,6 +239,7 @@ fn main() {
         day2(Part::Two);
         day3(Part::One);
         day3(Part::Two);
+        day4(Part::One);
     }
-    day4(Part::One);
+    day4(Part::Two);
 }
