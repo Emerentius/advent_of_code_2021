@@ -1,4 +1,6 @@
 #![feature(drain_filter)]
+use std::cmp::{max, min};
+
 use itertools::Itertools;
 
 #[derive(PartialEq, Eq)]
@@ -231,6 +233,90 @@ fn day4(part: Part) {
     }
 }
 
+struct Line {
+    // (x, y)
+    start: (i64, i64),
+    end: (i64, i64),
+}
+
+impl Line {
+    fn parse(line: &str) -> Self {
+        let (start, end) = line.split_once(" -> ").unwrap();
+        let parse_point = |nums: &str| {
+            let (x, y) = nums.split_once(',').unwrap();
+            (parse_num(x), parse_num(y))
+        };
+        Self {
+            start: parse_point(start),
+            end: parse_point(end),
+        }
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (i64, i64)>> {
+        assert!(self.is_horizontal() || self.is_vertical());
+        if self.is_horizontal() {
+            let y = self.start.1;
+            let x1 = self.start.0;
+            let x2 = self.end.0;
+            Box::new((min(x1, x2)..=max(x1, x2)).map(move |x| (x, y)))
+        } else {
+            let x = self.start.0;
+            let y1 = self.start.1;
+            let y2 = self.end.1;
+            Box::new((min(y1, y2)..=max(y1, y2)).map(move |y| (x, y)))
+        }
+    }
+
+    fn is_horizontal(&self) -> bool {
+        self.start.1 == self.end.1
+    }
+
+    fn is_vertical(&self) -> bool {
+        self.start.0 == self.end.0
+    }
+}
+
+fn day5(part: Part) {
+    let input = include_str!("day5_input.txt");
+    //let input = include_str!("day5_test_input.txt");
+    let mut lines = input.lines().map(Line::parse).collect::<Vec<_>>();
+
+    // max_x + 1 = n_cols
+    let get_xs = |line: &Line| [line.start.0, line.end.0];
+    let n_cols = lines.iter().flat_map(get_xs).max().unwrap() + 1;
+    let get_ys = |line: &Line| [line.start.1, line.end.1];
+    let n_rows = lines.iter().flat_map(get_ys).max().unwrap() + 1;
+
+    let mut map = vec![0; (n_cols * n_rows) as usize];
+
+    lines.retain(|line| line.is_horizontal() || line.is_vertical());
+
+    let idx = |x, y| (y * n_cols + x) as usize;
+
+    for line in lines {
+        for (x, y) in line.iter() {
+            map[idx(x, y)] += 1;
+        }
+    }
+
+    // debug print the board
+    // if true {
+    //     for y in 0..n_rows {
+    //         for x in 0..n_cols {
+    //             let num = map[idx(x, y)];
+    //             if num > 0 {
+    //                 print!("{}", num);
+    //             } else {
+    //                 print!(".");
+    //             }
+    //         }
+    //         println!();
+    //     }
+    // }
+
+    println!("{}", map.iter().filter(|&&num| num > 1).count());
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -240,6 +326,7 @@ fn main() {
         day3(Part::One);
         day3(Part::Two);
         day4(Part::One);
+        day4(Part::Two);
     }
-    day4(Part::Two);
+    day5(Part::One);
 }
