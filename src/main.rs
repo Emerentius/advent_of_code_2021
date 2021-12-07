@@ -348,82 +348,101 @@ fn day6(part: Part) {
 }
 
 fn day7(part: Part) {
-    // minimze fuel => d/dx sum_i( |x_i - x| ) = 0. The abs function makes an algebraic solution difficult.
     let input = include_str!("day7_input.txt");
     //let input = include_str!("day7_test_input.txt");
-    // when moving the target position from one position to the next one to the right,
-    // total fuel consumption rises by how many crabs are on or to the left of your previous position
-    // and lowers by how many crabs are to the right.
-    // Equilibrium is reached when equally many crabs are on both sides.
 
     let mut crab_positions = BTreeMap::new();
     for pos in input.trim().split(',').map(parse_num) {
         *crab_positions.entry(pos).or_insert(0) += 1;
     }
 
-    let (pos, n_crabs_to_left) = crab_positions.iter().next().unwrap();
-    let (mut pos, mut n_crabs_to_left) = (*pos, *n_crabs_to_left);
-    let mut n_crabs_to_right: i64 = crab_positions
-        .iter()
-        .skip(1)
-        .map(|(_, n_crabs)| n_crabs)
-        .sum();
-
-    let (mut total_fuel, mut move_right): (i64, Box<dyn FnMut(_, _, _) -> i64>) = match part {
+    match part {
         Part::One => {
-            let total_fuel = crab_positions
+            // minimze fuel => d/dx sum_i( |x_i - x| ) = 0. The abs function makes an algebraic solution difficult.
+            // when moving the target position from one position to the next one to the right,
+            // total fuel consumption rises by how many crabs are on or to the left of your previous position
+            // and lowers by how many crabs are to the right.
+            // Equilibrium is reached when equally many crabs are on both sides, then you can move either way
+            // without changing cost.
+            // Start on left-most position and move right until there aren't more crabs on the right anymore than the left.
+            //
+            // Alternative approach could be used with a simple sort:
+            // The optimum will be on the median value for odd numbers or one of the neighbors of it
+            // for even numbers. One would have to check both neighbors.
+
+            let (pos, n_crabs_to_left) = crab_positions.iter().next().unwrap();
+            let (mut pos, mut n_crabs_to_left) = (*pos, *n_crabs_to_left);
+            let mut total_fuel: i64 = crab_positions
                 .iter()
                 .map(|(crab_pos, n_crabs)| (crab_pos - pos) * n_crabs)
                 .sum();
-            (
-                total_fuel,
-                Box::new(|n_crabs_to_left, n_crabs_to_right, _n_crabs_on_next_pos| {
-                    n_crabs_to_left - n_crabs_to_right
-                }),
-            )
+            let mut n_crabs_to_right: i64 = crab_positions
+                .iter()
+                .skip(1)
+                .map(|(_, n_crabs)| n_crabs)
+                .sum();
+
+            let mut crab_pos_iter = crab_positions.iter().skip(1);
+            while n_crabs_to_right > n_crabs_to_left {
+                let (&next_pos, &n_crabs) = crab_pos_iter.next().unwrap();
+                let pos_diff = next_pos - pos;
+                total_fuel += (n_crabs_to_left - n_crabs_to_right) * pos_diff;
+                n_crabs_to_left += n_crabs;
+                n_crabs_to_right -= n_crabs;
+                pos = next_pos;
+                if n_crabs_to_right <= n_crabs_to_left {
+                    // there could be multiple equally good solutions
+                    break;
+                }
+            }
+
+            println!("best position: {}, fuel consumption: {}", pos, total_fuel);
         }
         Part::Two => {
-            let total_fuel = crab_positions
+            // The squaring actually makes algebra easier, because |x|² == x²
+            // x == target_pos, x_i == initial position ob submarine nr. i
+            // total_fuel_cost = sum_i fuel_cost_i(x) = sum_i ( [(x-x_i)² + |x-x_i|]/2 )
+            // d/dx total_fuel_cost = 0  to find minimum
+            // => d/dx total_fuel_cost = sum_i ( [2*(x-x_i) ± 1]/2  )
+            //                         = sum_i ( (x-x_i) ± 1/2 )
+            //                         = n * x - sum_i (x_i ± 1/2) = 0
+            // => n*x = sum_i (x_i) + sum_i (± 1/2)
+            // =>   x = sum_i (x_i)/n + sum_i (± 1/2) / n
+            //
+            // The first sum is the mean of all submarine positions. The second sum should be close to 0,
+            // but is at most +1/2 and at least -1/2.
+            // We need an integral solution so we have to check the neighbors of the result and find the minimum
+            // among those.
+            // Given the uncertainty of ± 1/2 in the result, we need to check not just the floor and the ceiling
+            // but also the ceil of mean + 1 and the floor of mean - 1 because the ± 1/2 term could push the mean between
+            // two different integers than where it starts.
+            // Hypothesis: ceil() and floor() suffice in all cases. Dunno how I could prove that.
+            let total_fuel = |target_pos: i64| -> i64 {
+                crab_positions
+                    .iter()
+                    .map(|(crab_pos, n_crabs)| {
+                        let diff = (crab_pos - target_pos).abs();
+                        (diff * (diff + 1) / 2) * n_crabs
+                    })
+                    .sum()
+            };
+
+            // this would be easier without aggregating crab positions in the map
+            let n_crabs_total: i64 = crab_positions.iter().map(|(_, n_crabs)| n_crabs).sum();
+            let avg_pos = crab_positions
                 .iter()
-                .map(|(crab_pos, n_crabs)| {
-                    let diff = (crab_pos - pos).abs();
-                    (diff * (diff + 1) / 2) * n_crabs
-                })
-                .sum();
-            let mut fuel_cost_per_move: i64 = crab_positions
-                .iter()
-                .skip(1) // not really necessary
-                .map(|(crab_pos, n_crabs)| (pos - crab_pos) * n_crabs)
-                .sum::<i64>()
-                + n_crabs_to_left;
-            (
-                total_fuel,
-                Box::new(
-                    move |n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos| {
-                        let current_cost = fuel_cost_per_move;
-                        fuel_cost_per_move +=
-                            n_crabs_to_left + n_crabs_to_right + n_crabs_on_next_pos;
-                        current_cost
-                    },
-                ),
-            )
+                .map(|(pos, n_crabs)| (pos * n_crabs) as f64)
+                .sum::<f64>()
+                / n_crabs_total as f64;
+
+            let (pos, total_fuel) = (((avg_pos - 1.0).floor() as i64)
+                ..=(avg_pos + 1.0).ceil() as i64)
+                .map(|pos| (pos, total_fuel(pos)))
+                .min_by_key(|&(_, total_fuel)| total_fuel)
+                .unwrap();
+            println!("best position: {}, fuel consumption: {}", pos, total_fuel);
         }
     };
-
-    let mut n_crabs_on_next_pos = crab_positions.get(&(pos + 1)).cloned().unwrap_or(0);
-    let mut cost_of_moving_right =
-        move_right(n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos);
-    while cost_of_moving_right < 0 {
-        //println!("{}: {}, cost: {}", pos, total_fuel, cost_of_moving_right);
-        pos += 1;
-        total_fuel += cost_of_moving_right;
-        n_crabs_to_left += n_crabs_on_next_pos;
-        n_crabs_to_right -= n_crabs_on_next_pos;
-        n_crabs_on_next_pos = crab_positions.get(&(pos + 1)).cloned().unwrap_or(0);
-        cost_of_moving_right = move_right(n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos);
-    }
-
-    println!("best position: {}, fuel consumption: {}", pos, total_fuel);
 }
 
 fn main() {
