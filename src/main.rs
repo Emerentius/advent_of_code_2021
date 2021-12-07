@@ -350,6 +350,7 @@ fn day6(part: Part) {
 fn day7(part: Part) {
     // minimze fuel => d/dx sum_i( |x_i - x| ) = 0. The abs function makes an algebraic solution difficult.
     let input = include_str!("day7_input.txt");
+    //let input = include_str!("day7_test_input.txt");
     // when moving the target position from one position to the next one to the right,
     // total fuel consumption rises by how many crabs are on or to the left of your previous position
     // and lowers by how many crabs are to the right.
@@ -362,28 +363,64 @@ fn day7(part: Part) {
 
     let (pos, n_crabs_to_left) = crab_positions.iter().next().unwrap();
     let (mut pos, mut n_crabs_to_left) = (*pos, *n_crabs_to_left);
-    let mut total_fuel: i64 = crab_positions
-        .iter()
-        .map(|(crab_pos, n_crabs)| (crab_pos - pos) * n_crabs)
-        .sum();
     let mut n_crabs_to_right: i64 = crab_positions
         .iter()
         .skip(1)
         .map(|(_, n_crabs)| n_crabs)
         .sum();
 
-    let mut crab_pos_iter = crab_positions.iter().skip(1);
-    while n_crabs_to_right > n_crabs_to_left {
-        let (&next_pos, &n_crabs) = crab_pos_iter.next().unwrap();
-        let pos_diff = next_pos - pos;
-        total_fuel += (n_crabs_to_left - n_crabs_to_right) * pos_diff;
-        n_crabs_to_left += n_crabs;
-        n_crabs_to_right -= n_crabs;
-        pos = next_pos;
-        if n_crabs_to_right <= n_crabs_to_left {
-            // there could be multiple equally good solutions
-            break;
+    let (mut total_fuel, mut move_right): (i64, Box<dyn FnMut(_, _, _) -> i64>) = match part {
+        Part::One => {
+            let total_fuel = crab_positions
+                .iter()
+                .map(|(crab_pos, n_crabs)| (crab_pos - pos) * n_crabs)
+                .sum();
+            (
+                total_fuel,
+                Box::new(|n_crabs_to_left, n_crabs_to_right, _n_crabs_on_next_pos| {
+                    n_crabs_to_left - n_crabs_to_right
+                }),
+            )
         }
+        Part::Two => {
+            let total_fuel = crab_positions
+                .iter()
+                .map(|(crab_pos, n_crabs)| {
+                    let diff = (crab_pos - pos).abs();
+                    (diff * (diff + 1) / 2) * n_crabs
+                })
+                .sum();
+            let mut fuel_cost_per_move: i64 = crab_positions
+                .iter()
+                .skip(1) // not really necessary
+                .map(|(crab_pos, n_crabs)| (pos - crab_pos) * n_crabs)
+                .sum::<i64>()
+                + n_crabs_to_left;
+            (
+                total_fuel,
+                Box::new(
+                    move |n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos| {
+                        let current_cost = fuel_cost_per_move;
+                        fuel_cost_per_move +=
+                            n_crabs_to_left + n_crabs_to_right + n_crabs_on_next_pos;
+                        current_cost
+                    },
+                ),
+            )
+        }
+    };
+
+    let mut n_crabs_on_next_pos = crab_positions.get(&(pos + 1)).cloned().unwrap_or(0);
+    let mut cost_of_moving_right =
+        move_right(n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos);
+    while cost_of_moving_right < 0 {
+        //println!("{}: {}, cost: {}", pos, total_fuel, cost_of_moving_right);
+        pos += 1;
+        total_fuel += cost_of_moving_right;
+        n_crabs_to_left += n_crabs_on_next_pos;
+        n_crabs_to_right -= n_crabs_on_next_pos;
+        n_crabs_on_next_pos = crab_positions.get(&(pos + 1)).cloned().unwrap_or(0);
+        cost_of_moving_right = move_right(n_crabs_to_left, n_crabs_to_right, n_crabs_on_next_pos);
     }
 
     println!("best position: {}, fuel consumption: {}", pos, total_fuel);
@@ -403,6 +440,7 @@ fn main() {
         day5(Part::Two);
         day6(Part::One);
         day6(Part::Two);
+        day7(Part::One);
     }
-    day7(Part::One);
+    day7(Part::Two);
 }
