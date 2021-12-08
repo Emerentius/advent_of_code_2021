@@ -445,6 +445,38 @@ fn day7(part: Part) {
     };
 }
 
+type SegmentMask = u8;
+
+fn day8(part: Part) {
+    let input = include_str!("day8_input.txt");
+    let segment_mask = |letter_mask: &str| {
+        letter_mask
+            .bytes()
+            .map(|ch| ch - b'a')
+            .map(|digit| 1 << digit)
+            .fold(0u8, std::ops::BitOr::bitor)
+    };
+    let convert_masks = |letter_masks: &str| {
+        letter_masks
+            .split_whitespace()
+            .map(segment_mask)
+            .collect::<Vec<_>>()
+    };
+    let notes = input
+        .lines()
+        .map(|line| line.split_once(" | ").unwrap())
+        .map(|(digit_masks, num)| (convert_masks(digit_masks), convert_masks(num)));
+
+    // 1, 4, 7 and 8 have unique amounts of segments active and they are 2, 3, 4 or 7 (not in that order)
+    let is_trivially_identifiable = |mask: SegmentMask| [2, 3, 4, 7].contains(&mask.count_ones());
+    let solution = notes
+        .into_iter()
+        .flat_map(|(_, num_digits)| num_digits)
+        .filter(|dig| is_trivially_identifiable(*dig))
+        .count();
+    println!("{}", solution);
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -460,6 +492,7 @@ fn main() {
         day6(Part::One);
         day6(Part::Two);
         day7(Part::One);
+        day7(Part::Two);
     }
-    day7(Part::Two);
+    day8(Part::One);
 }
