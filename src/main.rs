@@ -1,6 +1,6 @@
 #![feature(drain_filter)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
 
@@ -447,15 +447,42 @@ fn day7(part: Part) {
 
 type SegmentMask = u8;
 
+fn mask_iter(mut mask: u8) -> impl Iterator<Item = u8> {
+    std::iter::from_fn(move || {
+        if mask == 0 {
+            return None;
+        }
+        let lowest_bit = mask & (!mask + 1);
+        let bit_pos = lowest_bit.trailing_zeros() as u8;
+        mask ^= lowest_bit;
+        Some(bit_pos)
+    })
+}
+
+fn segment_mask(letter_mask: &str) -> SegmentMask {
+    letter_mask
+        .bytes()
+        .map(|ch| ch - b'a')
+        .map(|digit| 1 << digit)
+        .fold(0u8, std::ops::BitOr::bitor)
+}
+
+fn digit_segment_masks() -> [SegmentMask; 10] {
+    const DIGIT_SEGMENT_MASKS: [&str; 10] = [
+        "abcefg", "cf", "acdeg", "acdfg", "bcdf", "abdfg", "abdefg", "acf", "abcdefg", "abcdfg",
+    ];
+    DIGIT_SEGMENT_MASKS.map(segment_mask)
+}
+
+// compute what the segment mask for a digit looks like with the jumbled wires given the deduced mapping
+fn jumbled_segment_mask(digit_mask: u8, mapping: [u8; 7]) -> SegmentMask {
+    mask_iter(digit_mask)
+        .map(|desired_segment| mapping[desired_segment as usize])
+        .fold(0, std::ops::BitOr::bitor)
+}
+
 fn day8(part: Part) {
     let input = include_str!("day8_input.txt");
-    let segment_mask = |letter_mask: &str| {
-        letter_mask
-            .bytes()
-            .map(|ch| ch - b'a')
-            .map(|digit| 1 << digit)
-            .fold(0u8, std::ops::BitOr::bitor)
-    };
     let convert_masks = |letter_masks: &str| {
         letter_masks
             .split_whitespace()
@@ -467,14 +494,118 @@ fn day8(part: Part) {
         .map(|line| line.split_once(" | ").unwrap())
         .map(|(digit_masks, num)| (convert_masks(digit_masks), convert_masks(num)));
 
-    // 1, 4, 7 and 8 have unique amounts of segments active and they are 2, 3, 4 or 7 (not in that order)
-    let is_trivially_identifiable = |mask: SegmentMask| [2, 3, 4, 7].contains(&mask.count_ones());
-    let solution = notes
-        .into_iter()
-        .flat_map(|(_, num_digits)| num_digits)
-        .filter(|dig| is_trivially_identifiable(*dig))
-        .count();
-    println!("{}", solution);
+    match part {
+        Part::One => {
+            // 1, 4, 7 and 8 have unique amounts of segments active and they are 2, 3, 4 or 7 (not in that order)
+            let is_trivially_identifiable =
+                |mask: SegmentMask| [2, 3, 4, 7].contains(&mask.count_ones());
+            let solution = notes
+                .into_iter()
+                .flat_map(|(_, num_digits)| num_digits)
+                .filter(|dig| is_trivially_identifiable(*dig))
+                .count();
+            println!("{}", solution);
+        }
+        Part::Two => {
+            // Using bitmasks for two cases
+            // 1. Which segment numbers are on in the output for a single digit.
+            //    I use the type alias `SegmentMask` for this.
+            //    segment positions are numbered 0 to 6 inclusive
+            //    least significant bit == 0, most significant bit == 6
+            // 2. Which segment in the output could be linked to a segment in the input.
+            //    This is used in `day8_find_right_mapping()` and its result value `mapping`.
+            //    That part could probably be completely abstracted inside `day8_find_right_mapping`.
+
+            let mut sum = 0;
+            for (digit_masks, num) in notes {
+                let mapping = day8_find_right_mapping(&digit_masks);
+
+                let mask_to_digit = digit_segment_masks()
+                    .iter()
+                    .enumerate()
+                    .map(|(digit, mask)| (jumbled_segment_mask(*mask, mapping), digit))
+                    .collect::<HashMap<_, _>>();
+                let real_digits = num.iter().map(|digit| mask_to_digit[&digit]);
+                sum += digits_to_num(real_digits);
+            }
+
+            println!("{}", sum);
+        }
+    }
+}
+
+fn digits_to_num(digits: impl IntoIterator<Item = usize>) -> usize {
+    digits.into_iter().fold(0, |num, digit| num * 10 + digit)
+}
+
+fn day8_find_right_mapping(digit_masks: &[SegmentMask]) -> [u8; 7] {
+    let mut possible_mappings = [0b_0111_1111u8; 7];
+
+    for &mask in digit_masks {
+        let desired_segments: &[_] = match mask.count_ones() {
+            2 => &[2, 5],                // 1
+            3 => &[0, 2, 5],             // 7
+            4 => &[1, 2, 3, 5],          // 4
+            7 => &[0, 1, 2, 3, 4, 5, 6], // 8
+            _ => continue,
+        };
+        for segment in desired_segments {
+            possible_mappings[*segment as usize] &= mask;
+        }
+    }
+
+    let mut solutions = vec![];
+    _day8_find_right_mapping(possible_mappings, [false; 7], &digit_masks, &mut solutions);
+    assert!(solutions.len() == 1);
+    solutions[0]
+}
+
+fn _day8_find_right_mapping(
+    possible_mappings: [u8; 7],
+    mut previously_selected_row: [bool; 7],
+    numbers: &[SegmentMask],
+    solutions: &mut Vec<[u8; 7]>,
+) {
+    let (row, (&min_poss_mask, _)) = match possible_mappings
+        .iter()
+        .zip(previously_selected_row)
+        .enumerate()
+        .filter(|(_, (_, done))| !done)
+        .min_by_key(|(_, (map, _))| map.count_ones())
+    {
+        Some(res) => res,
+        None => {
+            // all rows already visited => the current mapping is possibly a solution. Check if we'd
+            // get the right masks
+            let jumbled_number_segment_masks =
+                digit_segment_masks().map(|mask| jumbled_segment_mask(mask, possible_mappings));
+            if numbers
+                .iter()
+                .all(|segment_mask| jumbled_number_segment_masks.contains(&segment_mask))
+            {
+                solutions.push(possible_mappings);
+            }
+            return;
+        }
+    };
+
+    previously_selected_row[row] = true;
+
+    for one_poss_col in mask_iter(min_poss_mask) {
+        let chosen_possibility = 1 << one_poss_col;
+        let mut new_possible_mappings = possible_mappings;
+        new_possible_mappings[row] = chosen_possibility;
+        for other_row in (0..7).filter(|&row2| row2 != row) {
+            new_possible_mappings[other_row] &= !chosen_possibility;
+        }
+
+        _day8_find_right_mapping(
+            new_possible_mappings,
+            previously_selected_row,
+            numbers,
+            solutions,
+        );
+    }
 }
 
 fn main() {
@@ -493,6 +624,7 @@ fn main() {
         day6(Part::Two);
         day7(Part::One);
         day7(Part::Two);
+        day8(Part::One);
     }
-    day8(Part::One);
+    day8(Part::Two);
 }
