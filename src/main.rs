@@ -608,6 +608,36 @@ fn _day8_find_right_mapping(
     }
 }
 
+fn neighbors(row: usize, col: usize) -> [(usize, usize); 4] {
+    [
+        (row.wrapping_sub(1), col), // up
+        (row + 1, col),             // down
+        (row, col.wrapping_sub(1)), // left
+        (row, col + 1),             // right
+    ]
+}
+fn day9(part: Part) {
+    let input = include_str!("day9_input.txt");
+    let height_map: Vec<Vec<_>> = input
+        .lines()
+        .map(|line| line.bytes().map(|byte| byte - b'0').collect())
+        .collect();
+
+    let mut sum_risk_level: u32 = 0;
+    for (row, heights) in height_map.iter().enumerate() {
+        for (col, &height) in heights.iter().enumerate() {
+            if neighbors(row, col)
+                .into_iter()
+                .filter_map(|(r, c)| height_map.get(r)?.get(c))
+                .all(|&neighbor_height| neighbor_height > height)
+            {
+                sum_risk_level += 1 + height as u32;
+            }
+        }
+    }
+    println!("{}", sum_risk_level);
+}
+
 fn main() {
     if false {
         day1(Part::One);
