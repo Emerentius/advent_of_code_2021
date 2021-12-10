@@ -1,6 +1,9 @@
 #![feature(drain_filter)]
 
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
+};
 
 use itertools::Itertools;
 
@@ -623,19 +626,71 @@ fn day9(part: Part) {
         .map(|line| line.bytes().map(|byte| byte - b'0').collect())
         .collect();
 
-    let mut sum_risk_level: u32 = 0;
-    for (row, heights) in height_map.iter().enumerate() {
-        for (col, &height) in heights.iter().enumerate() {
-            if neighbors(row, col)
+    let minima = itertools::iproduct!(0..height_map.len(), 0..height_map[0].len())
+        .map(|(r, c)| (r, c))
+        .filter(|&(row, col)| {
+            let height = height_map[row][col];
+            neighbors(row, col)
                 .into_iter()
                 .filter_map(|(r, c)| height_map.get(r)?.get(c))
                 .all(|&neighbor_height| neighbor_height > height)
-            {
-                sum_risk_level += 1 + height as u32;
-            }
+        })
+        .collect::<Vec<_>>();
+
+    match part {
+        Part::One => {
+            let sum_risk_level = minima
+                .into_iter()
+                .map(|(r, c)| height_map[r][c] as u32 + 1)
+                .sum::<u32>();
+            println!("{}", sum_risk_level);
+        }
+        Part::Two => {
+            let mut basins = minima
+                .into_iter()
+                .map(|(r, c)| find_cells_of_basin(r, c, &height_map))
+                .collect::<Vec<_>>();
+            basins.sort_by_key(HashSet::len);
+            let n = basins.len();
+            let solution: usize = basins[n - 3..].iter().rev().map(|hm| hm.len()).product();
+            println!("{}", solution);
         }
     }
-    println!("{}", sum_risk_level);
+}
+
+// Visit neighbors of the minimum and their neighbors, recursively
+// in order of rising height (BFS).
+// Every time we visit a new cell and all its neighbors that are not
+// already part of the basin are higher, then the cell is also in the
+// basin.
+fn find_cells_of_basin(row: usize, col: usize, height_map: &[Vec<u8>]) -> HashSet<(usize, usize)> {
+    let mut cells_to_check = BinaryHeap::new();
+    cells_to_check.push((Reverse(height_map[row][col]), row, col));
+    let mut already_visited = HashSet::new();
+    already_visited.insert((row, col));
+
+    let mut cells_of_basin = HashSet::new();
+
+    while let Some((Reverse(height), row, col)) = cells_to_check.pop() {
+        let new_neighbors = neighbors(row, col)
+            .into_iter()
+            .filter_map(|(r, c)| Some((r, c, *height_map.get(r)?.get(c)?)))
+            .filter(|&(r, c, _)| !cells_of_basin.contains(&(r, c)))
+            .filter(|&(_, _, height_n)| height_n < 9);
+
+        if new_neighbors
+            .clone()
+            .all(|(_, _, height_n)| height_n >= height)
+        {
+            for (r, c, height) in new_neighbors {
+                if already_visited.insert((r, c)) {
+                    cells_to_check.push((Reverse(height), r, c));
+                }
+            }
+            cells_of_basin.insert((row, col));
+        }
+    }
+    cells_of_basin
 }
 
 fn main() {
@@ -655,6 +710,8 @@ fn main() {
         day7(Part::One);
         day7(Part::Two);
         day8(Part::One);
+        day8(Part::Two);
+        day9(Part::One);
     }
-    day8(Part::Two);
+    day9(Part::Two);
 }
