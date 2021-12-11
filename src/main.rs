@@ -693,6 +693,47 @@ fn find_cells_of_basin(row: usize, col: usize, height_map: &[Vec<u8>]) -> HashSe
     cells_of_basin
 }
 
+fn day10(part: Part) {
+    fn check_line(line: &str) -> Option<u8> {
+        let mut opening_char = vec![];
+
+        for ch in line.bytes() {
+            let required_opener = match ch {
+                b'(' | b'{' | b'[' | b'<' => {
+                    opening_char.push(ch);
+                    continue;
+                }
+                b')' => b'(',
+                b'}' => b'{',
+                b']' => b'[',
+                b'>' => b'<',
+                _ => unreachable!(),
+            };
+            if opening_char.pop() != Some(required_opener) {
+                // corrupt line, return first illegal character
+                return Some(ch);
+            }
+        }
+
+        None
+    }
+
+    let input = include_str!("day10_input.txt");
+
+    let solution = input
+        .lines()
+        .filter_map(check_line)
+        .map(|illegal_char| match illegal_char {
+            b')' => 3,
+            b']' => 57,
+            b'}' => 1197,
+            b'>' => 25137,
+            _ => unreachable!(),
+        })
+        .sum::<u64>();
+    println!("{}", solution);
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -712,6 +753,7 @@ fn main() {
         day8(Part::One);
         day8(Part::Two);
         day9(Part::One);
+        day9(Part::Two);
     }
-    day9(Part::Two);
+    day10(Part::One);
 }
