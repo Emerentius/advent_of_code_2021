@@ -774,20 +774,12 @@ fn day11(part: Part) {
             .filter(move |&neighbor| neighbor != cell)
     }
 
-    let input = include_str!("day11_input.txt");
-    let mut energy_levels = input
-        .lines()
-        .flat_map(|line| line.bytes())
-        .map(|byte| (byte - b'0') as i32)
-        .collect::<Vec<_>>();
-
-    let n_cols = input.lines().next().unwrap().len();
-    let n_rows = energy_levels.len() / n_cols;
-
-    let mut n_flashes = 0;
-    for _ in 0..100 {
+    // returns how many flashes occured in the step
+    fn simulate_step(energy_levels: &mut [i32], n_rows: usize, n_cols: usize) -> i32 {
+        let mut n_flashes = 0;
         let mut any_octopus_flashes = false;
-        for energy in &mut energy_levels {
+
+        for energy in energy_levels.iter_mut() {
             *energy += 1;
             any_octopus_flashes |= *energy == 10;
         }
@@ -808,10 +800,26 @@ fn day11(part: Part) {
             }
         }
 
-        for energy in &mut energy_levels {
+        for energy in energy_levels {
             *energy = max(*energy, 0);
         }
+
+        n_flashes
     }
+
+    let input = include_str!("day11_input.txt");
+    let mut energy_levels = input
+        .lines()
+        .flat_map(|line| line.bytes())
+        .map(|byte| (byte - b'0') as i32)
+        .collect::<Vec<_>>();
+
+    let n_cols = input.lines().next().unwrap().len();
+    let n_rows = energy_levels.len() / n_cols;
+
+    let n_flashes = (0..100)
+        .map(|_| simulate_step(&mut energy_levels, n_rows, n_cols))
+        .sum::<i32>();
 
     println!("{}", n_flashes);
 }
