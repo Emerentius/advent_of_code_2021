@@ -1,7 +1,7 @@
 #![feature(drain_filter)]
 
 use std::{
-    cmp::Reverse,
+    cmp::{max, min, Reverse},
     collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
 };
 
@@ -760,6 +760,62 @@ fn day10(part: Part) {
     }
 }
 
+fn day11(part: Part) {
+    fn neighbors(cell: usize, n_rows: usize, n_cols: usize) -> impl Iterator<Item = usize> {
+        let row = cell / n_cols;
+        let col = cell % n_cols;
+
+        let min_row = row.saturating_sub(1);
+        let max_row = min(row + 1, n_rows - 1);
+        let min_col = col.saturating_sub(1);
+        let max_col = min(col + 1, n_cols - 1);
+        itertools::iproduct!(min_row..=max_row, min_col..=max_col)
+            .map(move |(r, c)| r * n_cols + c)
+            .filter(move |&neighbor| neighbor != cell)
+    }
+
+    let input = include_str!("day11_input.txt");
+    let mut energy_levels = input
+        .lines()
+        .flat_map(|line| line.bytes())
+        .map(|byte| (byte - b'0') as i32)
+        .collect::<Vec<_>>();
+
+    let n_cols = input.lines().next().unwrap().len();
+    let n_rows = energy_levels.len() / n_cols;
+
+    let mut n_flashes = 0;
+    for _ in 0..100 {
+        let mut any_octopus_flashes = false;
+        for energy in &mut energy_levels {
+            *energy += 1;
+            any_octopus_flashes |= *energy == 10;
+        }
+
+        while any_octopus_flashes {
+            any_octopus_flashes = false;
+
+            for cell in 0..energy_levels.len() {
+                if energy_levels[cell] >= 10 {
+                    any_octopus_flashes = true;
+                    n_flashes += 1;
+
+                    energy_levels[cell] -= 30;
+                    for neighbor_cell in neighbors(cell, n_rows, n_cols) {
+                        energy_levels[neighbor_cell] += 1;
+                    }
+                }
+            }
+        }
+
+        for energy in &mut energy_levels {
+            *energy = max(*energy, 0);
+        }
+    }
+
+    println!("{}", n_flashes);
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -781,6 +837,7 @@ fn main() {
         day9(Part::One);
         day9(Part::Two);
         day10(Part::One);
+        day10(Part::Two);
     }
-    day10(Part::Two);
+    day11(Part::One);
 }
