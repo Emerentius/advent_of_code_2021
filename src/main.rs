@@ -814,14 +814,28 @@ fn day11(part: Part) {
         .map(|byte| (byte - b'0') as i32)
         .collect::<Vec<_>>();
 
+    let n_octopuses = energy_levels.len() as i32;
     let n_cols = input.lines().next().unwrap().len();
     let n_rows = energy_levels.len() / n_cols;
 
-    let n_flashes = (0..100)
-        .map(|_| simulate_step(&mut energy_levels, n_rows, n_cols))
-        .sum::<i32>();
+    let mut simulation_steps =
+        (1..).map(|step| (step, simulate_step(&mut energy_levels, n_rows, n_cols)));
 
-    println!("{}", n_flashes);
+    match part {
+        Part::One => {
+            let n_flashes = simulation_steps
+                .take(100)
+                .map(|(_, n_flashes)| n_flashes)
+                .sum::<i32>();
+            println!("{}", n_flashes);
+        }
+        Part::Two => {
+            let (synchronized_step, _) = simulation_steps
+                .find(|&(_, n_flashes)| n_flashes == n_octopuses)
+                .unwrap();
+            println!("{}", synchronized_step);
+        }
+    }
 }
 
 fn main() {
@@ -846,6 +860,7 @@ fn main() {
         day9(Part::Two);
         day10(Part::One);
         day10(Part::Two);
+        day11(Part::One);
     }
-    day11(Part::One);
+    day11(Part::Two);
 }
