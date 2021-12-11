@@ -694,44 +694,70 @@ fn find_cells_of_basin(row: usize, col: usize, height_map: &[Vec<u8>]) -> HashSe
 }
 
 fn day10(part: Part) {
-    fn check_line(line: &str) -> Option<u8> {
-        let mut opening_char = vec![];
+    fn check_line(line: &str) -> Result<Vec<char>, char> {
+        let mut required_closing_chars = vec![];
 
-        for ch in line.bytes() {
-            let required_opener = match ch {
-                b'(' | b'{' | b'[' | b'<' => {
-                    opening_char.push(ch);
+        for ch in line.chars() {
+            let required_closer = match ch {
+                '(' => ')',
+                '{' => '}',
+                '[' => ']',
+                '<' => '>',
+                // corrupt line, return first illegal character
+                ')' | '>' | '}' | ']' => {
+                    if required_closing_chars.pop() != Some(ch) {
+                        return Err(ch);
+                    }
                     continue;
                 }
-                b')' => b'(',
-                b'}' => b'{',
-                b']' => b'[',
-                b'>' => b'<',
                 _ => unreachable!(),
             };
-            if opening_char.pop() != Some(required_opener) {
-                // corrupt line, return first illegal character
-                return Some(ch);
-            }
+            required_closing_chars.push(required_closer);
         }
 
-        None
+        required_closing_chars.reverse();
+        Ok(required_closing_chars)
     }
 
     let input = include_str!("day10_input.txt");
 
-    let solution = input
-        .lines()
-        .filter_map(check_line)
-        .map(|illegal_char| match illegal_char {
-            b')' => 3,
-            b']' => 57,
-            b'}' => 1197,
-            b'>' => 25137,
-            _ => unreachable!(),
-        })
-        .sum::<u64>();
-    println!("{}", solution);
+    match part {
+        Part::One => {
+            let solution = input
+                .lines()
+                .filter_map(|line| check_line(line).err())
+                .map(|illegal_char| match illegal_char {
+                    ')' => 3,
+                    ']' => 57,
+                    '}' => 1197,
+                    '>' => 25137,
+                    _ => unreachable!(),
+                })
+                .sum::<u64>();
+            println!("{}", solution);
+        }
+        Part::Two => {
+            let mut completion_scores = input
+                .lines()
+                .filter_map(|line| check_line(line).ok())
+                .map(|required_closing_chars| {
+                    required_closing_chars
+                        .into_iter()
+                        .map(|closing_ch| match closing_ch {
+                            ')' => 1,
+                            ']' => 2,
+                            '}' => 3,
+                            '>' => 4,
+                            _ => unreachable!(),
+                        })
+                        .fold(0, |score, ch_score| score * 5 + ch_score)
+                })
+                .collect::<Vec<u64>>();
+            completion_scores.sort();
+            let mid = completion_scores.len() / 2;
+            println!("{}", completion_scores[mid]);
+        }
+    }
 }
 
 fn main() {
@@ -754,6 +780,7 @@ fn main() {
         day8(Part::Two);
         day9(Part::One);
         day9(Part::Two);
+        day10(Part::One);
     }
-    day10(Part::One);
+    day10(Part::Two);
 }
