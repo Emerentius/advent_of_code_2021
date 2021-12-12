@@ -838,6 +838,48 @@ fn day11(part: Part) {
     }
 }
 
+fn day12_search_graph<'a>(
+    current_cave: &'a str,
+    connections: &HashMap<&'a str, HashSet<&'a str>>,
+    path: &mut Vec<&'a str>,
+    all_paths: &mut Vec<Vec<&'a str>>,
+) {
+    if current_cave == "end" {
+        all_paths.push(path.clone());
+        return;
+    }
+
+    for &neighbor_cave in &connections[current_cave] {
+        if neighbor_cave.chars().next().unwrap().is_lowercase() && path.contains(&neighbor_cave) {
+            continue;
+        }
+
+        path.push(neighbor_cave);
+        day12_search_graph(neighbor_cave, connections, path, all_paths);
+        path.pop();
+    }
+}
+
+fn day12(part: Part) {
+    let input = include_str!("day12_input.txt");
+    let mut connections = HashMap::new();
+
+    let insert_conn = |conns: &mut HashMap<_, _>, cave1, cave2| {
+        conns.entry(cave1).or_insert(HashSet::new()).insert(cave2)
+    };
+
+    for connection in input.lines() {
+        let (cave1, cave2) = connection.split_once("-").unwrap();
+        insert_conn(&mut connections, cave1, cave2);
+        insert_conn(&mut connections, cave2, cave1);
+    }
+
+    let mut all_paths = vec![];
+    day12_search_graph("start", &connections, &mut vec!["start"], &mut all_paths);
+
+    println!("{}", all_paths.len());
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -861,6 +903,7 @@ fn main() {
         day10(Part::One);
         day10(Part::Two);
         day11(Part::One);
+        day11(Part::Two);
     }
-    day11(Part::Two);
+    day12(Part::One);
 }
