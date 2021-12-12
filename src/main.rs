@@ -843,19 +843,33 @@ fn day12_search_graph<'a>(
     connections: &HashMap<&'a str, HashSet<&'a str>>,
     path: &mut Vec<&'a str>,
     all_paths: &mut Vec<Vec<&'a str>>,
+    n_visits_small_cave_max: usize,
 ) {
     if current_cave == "end" {
         all_paths.push(path.clone());
         return;
     }
 
-    for &neighbor_cave in &connections[current_cave] {
-        if neighbor_cave.chars().next().unwrap().is_lowercase() && path.contains(&neighbor_cave) {
+    for &neighbor_cave in connections[current_cave].iter().filter(|&&c| c != "start") {
+        let n_previous_visits = path.iter().filter(|&c| c == &neighbor_cave).count();
+        let is_small_cave = neighbor_cave.chars().next().unwrap().is_lowercase();
+        if is_small_cave && n_previous_visits >= n_visits_small_cave_max {
             continue;
         }
+        let new_n_visits_max = if is_small_cave && n_previous_visits == 1 {
+            1
+        } else {
+            n_visits_small_cave_max
+        };
 
         path.push(neighbor_cave);
-        day12_search_graph(neighbor_cave, connections, path, all_paths);
+        day12_search_graph(
+            neighbor_cave,
+            connections,
+            path,
+            all_paths,
+            new_n_visits_max,
+        );
         path.pop();
     }
 }
@@ -874,8 +888,19 @@ fn day12(part: Part) {
         insert_conn(&mut connections, cave2, cave1);
     }
 
+    let n_visits_max = match part {
+        Part::One => 1,
+        Part::Two => 2,
+    };
+
     let mut all_paths = vec![];
-    day12_search_graph("start", &connections, &mut vec!["start"], &mut all_paths);
+    day12_search_graph(
+        "start",
+        &connections,
+        &mut vec!["start"],
+        &mut all_paths,
+        n_visits_max,
+    );
 
     println!("{}", all_paths.len());
 }
@@ -904,6 +929,7 @@ fn main() {
         day10(Part::Two);
         day11(Part::One);
         day11(Part::Two);
+        day12(Part::One);
     }
-    day12(Part::One);
+    day12(Part::Two);
 }
