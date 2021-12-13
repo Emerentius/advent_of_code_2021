@@ -1026,7 +1026,7 @@ fn day13(part: Part) {
             });
             for row in 0..final_board.n_rows() {
                 for col in 0..final_board.n_cols() {
-                    print!("{}", if final_board[(col, row)] { '█' } else { ' ' });
+                    print!("{0}{0}", if final_board[(col, row)] { '█' } else { ' ' });
                 }
                 println!();
             }
