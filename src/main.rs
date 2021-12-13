@@ -3,6 +3,7 @@
 use std::{
     cmp::{max, min, Reverse},
     collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
+    ops::{Index, IndexMut},
 };
 
 use itertools::Itertools;
@@ -905,6 +906,134 @@ fn day12(part: Part) {
     println!("{}", all_paths.len());
 }
 
+// generic 2D board
+// This should come in handy with all these 2D-matrix problems
+struct Board<T> {
+    board: Vec<T>,
+    n_cols: usize,
+}
+
+impl<T: Clone> Board<T> {
+    fn new(default_val: T, n_rows: usize, n_cols: usize) -> Self {
+        Board {
+            board: vec![default_val; n_rows * n_cols],
+            n_cols,
+        }
+    }
+
+    fn n_cols(&self) -> usize {
+        self.n_cols
+    }
+
+    fn n_rows(&self) -> usize {
+        self.board.len() / self.n_cols
+    }
+
+    fn cells(&self) -> impl Iterator<Item = (usize, usize)> {
+        itertools::iproduct!(0..self.n_cols(), 0..self.n_rows())
+    }
+}
+
+impl<T> Index<(usize, usize)> for Board<T> {
+    type Output = T;
+
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        &self.board[y * self.n_cols + x]
+    }
+}
+
+impl<T> IndexMut<(usize, usize)> for Board<T> {
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        &mut self.board[y * self.n_cols + x]
+    }
+}
+
+fn day13(part: Part) {
+    fn fold_coordinate(pos: usize, fold_coordinate: usize) -> Option<usize> {
+        (pos != fold_coordinate).then(|| {
+            if pos > fold_coordinate {
+                2 * fold_coordinate - pos
+            } else {
+                pos
+            }
+        })
+    }
+
+    let input = include_str!("day13_input.txt");
+    let (dots, folds) = input.split_once("\n\n").unwrap();
+    let dots = dots
+        .lines()
+        .map(|line| line.split_once(',').unwrap())
+        .map(|(x, y)| (parse_num(x) as usize, parse_num(y) as usize))
+        .collect_vec();
+    let max_x = dots.iter().map(|&(x, _)| x).max().unwrap();
+    let max_y = dots.iter().map(|&(_, y)| y).max().unwrap();
+
+    let mut board = Board::new(false, max_y + 1, max_x + 1);
+    for (x, y) in dots {
+        board[(x, y)] = true;
+    }
+
+    let folds = folds
+        .lines()
+        .map(|line| {
+            line.strip_prefix("fold along ")
+                .unwrap()
+                .split_once("=")
+                .unwrap()
+        })
+        .map(|(direction, coordinate)| (direction, parse_num(coordinate) as usize))
+        .collect_vec();
+
+    fn apply_fold(board: Board<bool>, fold_direction: &str, coordinate: usize) -> Board<bool> {
+        let (new_n_cols, new_n_rows, new_coordinate) = match fold_direction {
+            "x" => {
+                assert_eq!(coordinate * 2 + 1, board.n_cols());
+                let new_coord: Box<dyn Fn(_, _) -> _> =
+                    Box::new(|x, y| Some((fold_coordinate(x, coordinate)?, y)));
+                (board.n_cols() / 2, board.n_rows(), new_coord)
+            }
+            "y" => {
+                assert_eq!(coordinate * 2 + 1, board.n_rows());
+                let new_coord = Box::new(|x, y| Some((x, fold_coordinate(y, coordinate)?))) as _;
+                (board.n_cols(), board.n_rows() / 2, new_coord)
+            }
+            _ => unreachable!(),
+        };
+
+        let mut new_board = Board::new(false, new_n_rows, new_n_cols);
+        for (x, y) in board.cells() {
+            if let Some(new_coords) = new_coordinate(x, y) {
+                new_board[new_coords] |= board[(x, y)];
+            }
+        }
+
+        new_board
+    }
+
+    match part {
+        Part::One => {
+            let (fold_direction, coordinate) = folds[0];
+            let new_board = apply_fold(board, fold_direction, coordinate);
+            println!(
+                "{}",
+                new_board.board.iter().filter(|&&marked| marked).count()
+            );
+        }
+        Part::Two => {
+            let final_board = folds.into_iter().fold(board, |board, (direction, coord)| {
+                apply_fold(board, direction, coord)
+            });
+            for row in 0..final_board.n_rows() {
+                for col in 0..final_board.n_cols() {
+                    print!("{}", if final_board[(col, row)] { '█' } else { ' ' });
+                }
+                println!();
+            }
+        }
+    }
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -930,6 +1059,8 @@ fn main() {
         day11(Part::One);
         day11(Part::Two);
         day12(Part::One);
+        day12(Part::Two);
     }
-    day12(Part::Two);
+    day13(Part::One);
+    day13(Part::Two);
 }
