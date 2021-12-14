@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
     ops::{Index, IndexMut},
 };
+use structopt::StructOpt;
 
 use itertools::Itertools;
 
@@ -1098,35 +1099,44 @@ fn day14(part: Part) {
     println!("{}", max_count - min_count);
 }
 
+#[derive(StructOpt)]
+struct Opt {
+    day: u8,
+    part: u8,
+}
+
 fn main() {
-    if false {
-        day1(Part::One);
-        day1(Part::Two);
-        day2(Part::One);
-        day2(Part::Two);
-        day3(Part::One);
-        day3(Part::Two);
-        day4(Part::One);
-        day4(Part::Two);
-        day5(Part::One);
-        day5(Part::Two);
-        day6(Part::One);
-        day6(Part::Two);
-        day7(Part::One);
-        day7(Part::Two);
-        day8(Part::One);
-        day8(Part::Two);
-        day9(Part::One);
-        day9(Part::Two);
-        day10(Part::One);
-        day10(Part::Two);
-        day11(Part::One);
-        day11(Part::Two);
-        day12(Part::One);
-        day12(Part::Two);
-        day13(Part::One);
-        day13(Part::Two);
-        day14(Part::One);
+    let opt = Opt::from_args();
+
+    match (opt.day, opt.part) {
+        (1, 1) => day1(Part::One),
+        (1, 2) => day1(Part::Two),
+        (2, 1) => day2(Part::One),
+        (2, 2) => day2(Part::Two),
+        (3, 1) => day3(Part::One),
+        (3, 2) => day3(Part::Two),
+        (4, 1) => day4(Part::One),
+        (4, 2) => day4(Part::Two),
+        (5, 1) => day5(Part::One),
+        (5, 2) => day5(Part::Two),
+        (6, 1) => day6(Part::One),
+        (6, 2) => day6(Part::Two),
+        (7, 1) => day7(Part::One),
+        (7, 2) => day7(Part::Two),
+        (8, 1) => day8(Part::One),
+        (8, 2) => day8(Part::Two),
+        (9, 1) => day9(Part::One),
+        (9, 2) => day9(Part::Two),
+        (10, 1) => day10(Part::One),
+        (10, 2) => day10(Part::Two),
+        (11, 1) => day11(Part::One),
+        (11, 2) => day11(Part::Two),
+        (12, 1) => day12(Part::One),
+        (12, 2) => day12(Part::Two),
+        (13, 1) => day13(Part::One),
+        (13, 2) => day13(Part::Two),
+        (14, 1) => day14(Part::One),
+        (14, 2) => day14(Part::Two),
+        _ => println!("not yet implemented or doesn't exist"),
     }
-    day14(Part::Two);
 }
