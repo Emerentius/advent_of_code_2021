@@ -1,5 +1,6 @@
 #![feature(drain_filter)]
 
+use std::hash::Hash;
 use std::{
     cmp::{max, min, Reverse},
     collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
@@ -1034,35 +1035,66 @@ fn day13(part: Part) {
     }
 }
 
+fn count_occurences<T: Eq + Hash>(iter: impl Iterator<Item = T>) -> HashMap<T, usize> {
+    sum_occurences(iter.map(|item| (item, 1)))
+}
+
+fn sum_occurences<T: Eq + Hash>(iter: impl Iterator<Item = (T, usize)>) -> HashMap<T, usize> {
+    let mut count = HashMap::new();
+    for (item, occ) in iter {
+        *count.entry(item).or_insert(0) += occ;
+    }
+    count
+}
+
 fn day14(part: Part) {
     let input = include_str!("day14_input.txt");
     let (template, rules) = input.split_once("\n\n").unwrap();
     let rules = rules
         .lines()
         .map(|line| line.split_once(" -> ").unwrap())
+        .map(|(pair, insertion)| {
+            let pair = pair.as_bytes();
+            ((pair[0], pair[1]), insertion.as_bytes()[0])
+        })
         .collect::<HashMap<_, _>>();
 
-    let next_polymer = |polymer: &str| {
-        let mut new_polymer = polymer[0..1].to_owned();
-        for i in 0..polymer.len() - 1 {
-            let pair = &polymer[i..i + 2];
-            if let Some(to_insert) = rules.get(pair) {
-                new_polymer.push_str(to_insert);
+    let pairs = template.as_bytes().windows(2).map(|p| (p[0], p[1]));
+    let initial_pair_counts = count_occurences(pairs);
+    let initial_char_counts = count_occurences(template.as_bytes().iter().copied());
+
+    let next_pair_counts = |pair_counts: HashMap<(u8, u8), usize>,
+                            char_counts: HashMap<u8, usize>| {
+        let mut new_pair_counts = HashMap::new();
+        let mut new_char_counts = char_counts.clone();
+
+        for (pair, count) in pair_counts {
+            match rules.get(&pair) {
+                Some(&insertion) => {
+                    *new_pair_counts.entry((pair.0, insertion)).or_insert(0) += count;
+                    *new_pair_counts.entry((insertion, pair.1)).or_insert(0) += count;
+                    *new_char_counts.entry(insertion).or_insert(0) += count;
+                }
+                None => {
+                    *new_pair_counts.entry(pair).or_insert(0) += count;
+                }
             }
-            new_polymer.push_str(&polymer[i + 1..i + 2]);
         }
-        new_polymer
+        (new_pair_counts, new_char_counts)
     };
 
-    let polymer = (0..10).fold(template.to_owned(), |polymer, _| next_polymer(&polymer));
+    let n_repetitions = match part {
+        Part::One => 10,
+        Part::Two => 40,
+    };
+    let (_, char_counts) = (0..n_repetitions).fold(
+        (initial_pair_counts, initial_char_counts),
+        |(pair_counts, char_counts), _| next_pair_counts(pair_counts, char_counts),
+    );
 
-    let mut counts = HashMap::new();
-    for ch in polymer.chars() {
-        *counts.entry(ch).or_insert(0) += 1;
-    }
+    let min_count = char_counts.values().min().unwrap();
+    let max_count = char_counts.values().max().unwrap();
 
-    let min_count = counts.values().min().unwrap();
-    let max_count = counts.values().max().unwrap();
     println!("{}", max_count - min_count);
 }
 
@@ -1094,6 +1126,7 @@ fn main() {
         day12(Part::Two);
         day13(Part::One);
         day13(Part::Two);
+        day14(Part::One);
     }
-    day14(Part::One);
+    day14(Part::Two);
 }
