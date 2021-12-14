@@ -1034,6 +1034,38 @@ fn day13(part: Part) {
     }
 }
 
+fn day14(part: Part) {
+    let input = include_str!("day14_input.txt");
+    let (template, rules) = input.split_once("\n\n").unwrap();
+    let rules = rules
+        .lines()
+        .map(|line| line.split_once(" -> ").unwrap())
+        .collect::<HashMap<_, _>>();
+
+    let next_polymer = |polymer: &str| {
+        let mut new_polymer = polymer[0..1].to_owned();
+        for i in 0..polymer.len() - 1 {
+            let pair = &polymer[i..i + 2];
+            if let Some(to_insert) = rules.get(pair) {
+                new_polymer.push_str(to_insert);
+            }
+            new_polymer.push_str(&polymer[i + 1..i + 2]);
+        }
+        new_polymer
+    };
+
+    let polymer = (0..10).fold(template.to_owned(), |polymer, _| next_polymer(&polymer));
+
+    let mut counts = HashMap::new();
+    for ch in polymer.chars() {
+        *counts.entry(ch).or_insert(0) += 1;
+    }
+
+    let min_count = counts.values().min().unwrap();
+    let max_count = counts.values().max().unwrap();
+    println!("{}", max_count - min_count);
+}
+
 fn main() {
     if false {
         day1(Part::One);
@@ -1060,7 +1092,8 @@ fn main() {
         day11(Part::Two);
         day12(Part::One);
         day12(Part::Two);
+        day13(Part::One);
+        day13(Part::Two);
     }
-    day13(Part::One);
-    day13(Part::Two);
+    day14(Part::One);
 }
