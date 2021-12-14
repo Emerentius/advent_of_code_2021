@@ -1082,19 +1082,13 @@ fn day14(part: Part) {
     let pair_counts =
         (0..n_repetitions).fold(pair_counts, |pair_counts, _| next_pair_counts(pair_counts));
     // every character is part of two pairs except for the very first and last
-    // so summing the occurences in all pairs gives us ~double the desired count.
-    // We can then correct for the first and last char by adding 1 to their counts as well
-    // so that every char is double counted and divide by 2.
-    let mut char_counts = sum_occurences(
-        pair_counts
-            .into_iter()
-            .flat_map(|((c1, c2), occ)| [(c1, occ), (c2, occ)]),
-    );
-    *char_counts.get_mut(&template[0]).unwrap() += 1;
+    // so count only the first character of each pair which counts every char once
+    // except for the last one and then add that one after.
+    let mut char_counts = sum_occurences(pair_counts.into_iter().map(|((c1, _), occ)| (c1, occ)));
     *char_counts.get_mut(template.last().unwrap()).unwrap() += 1;
 
-    let min_count = char_counts.values().min().unwrap() / 2;
-    let max_count = char_counts.values().max().unwrap() / 2;
+    let min_count = char_counts.values().min().unwrap();
+    let max_count = char_counts.values().max().unwrap();
 
     println!("{}", max_count - min_count);
 }
