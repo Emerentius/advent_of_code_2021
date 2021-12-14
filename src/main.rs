@@ -1051,6 +1051,7 @@ fn sum_occurences<T: Eq + Hash>(iter: impl Iterator<Item = (T, usize)>) -> HashM
 fn day14(part: Part) {
     let input = include_str!("day14_input.txt");
     let (template, rules) = input.split_once("\n\n").unwrap();
+    let template = template.as_bytes();
     let rules = rules
         .lines()
         .map(|line| line.split_once(" -> ").unwrap())
@@ -1060,41 +1061,40 @@ fn day14(part: Part) {
         })
         .collect::<HashMap<_, _>>();
 
-    let pairs = template.as_bytes().windows(2).map(|p| (p[0], p[1]));
-    let initial_pair_counts = count_occurences(pairs);
-    let initial_char_counts = count_occurences(template.as_bytes().iter().copied());
-
-    let next_pair_counts = |pair_counts: HashMap<(u8, u8), usize>,
-                            char_counts: HashMap<u8, usize>| {
-        let mut new_pair_counts = HashMap::new();
-        let mut new_char_counts = char_counts.clone();
-
-        for (pair, count) in pair_counts {
-            match rules.get(&pair) {
-                Some(&insertion) => {
-                    *new_pair_counts.entry((pair.0, insertion)).or_insert(0) += count;
-                    *new_pair_counts.entry((insertion, pair.1)).or_insert(0) += count;
-                    *new_char_counts.entry(insertion).or_insert(0) += count;
-                }
-                None => {
-                    *new_pair_counts.entry(pair).or_insert(0) += count;
-                }
+    let pairs = template.windows(2).map(|p| (p[0], p[1]));
+    let pair_counts = count_occurences(pairs);
+    let next_pair_counts = |pair_counts: HashMap<(u8, u8), usize>| {
+        sum_occurences(pair_counts.into_iter().flat_map(|(pair, count)| {
+            // if an insertion rule exists, map the pair onto two new pairs and sum their counts
+            if let Some(&insertion) = rules.get(&pair) {
+                [(pair.0, insertion), (insertion, pair.1)].map(|p| (p, count))
+            } else {
+                // keep just the one pair. The second pair of count 0 is to have a uniform return type.
+                [(pair, count), (pair, 0)]
             }
-        }
-        (new_pair_counts, new_char_counts)
+        }))
     };
 
     let n_repetitions = match part {
         Part::One => 10,
         Part::Two => 40,
     };
-    let (_, char_counts) = (0..n_repetitions).fold(
-        (initial_pair_counts, initial_char_counts),
-        |(pair_counts, char_counts), _| next_pair_counts(pair_counts, char_counts),
+    let pair_counts =
+        (0..n_repetitions).fold(pair_counts, |pair_counts, _| next_pair_counts(pair_counts));
+    // every character is part of two pairs except for the very first and last
+    // so summing the occurences in all pairs gives us ~double the desired count.
+    // We can then correct for the first and last char by adding 1 to their counts as well
+    // so that every char is double counted and divide by 2.
+    let mut char_counts = sum_occurences(
+        pair_counts
+            .into_iter()
+            .flat_map(|((c1, c2), occ)| [(c1, occ), (c2, occ)]),
     );
+    *char_counts.get_mut(&template[0]).unwrap() += 1;
+    *char_counts.get_mut(template.last().unwrap()).unwrap() += 1;
 
-    let min_count = char_counts.values().min().unwrap();
-    let max_count = char_counts.values().max().unwrap();
+    let min_count = char_counts.values().min().unwrap() / 2;
+    let max_count = char_counts.values().max().unwrap() / 2;
 
     println!("{}", max_count - min_count);
 }
