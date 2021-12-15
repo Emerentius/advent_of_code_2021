@@ -932,7 +932,15 @@ impl<T: Clone> Board<T> {
     }
 
     fn cells(&self) -> impl Iterator<Item = (usize, usize)> {
-        itertools::iproduct!(0..self.n_cols(), 0..self.n_rows())
+        itertools::iproduct!(0..self.n_rows(), 0..self.n_cols()).map(|(y, x)| (x, y))
+    }
+
+    fn neighbors(&self, (row, col): (usize, usize)) -> impl Iterator<Item = (usize, usize)> {
+        let n_rows = self.n_rows();
+        let n_cols = self.n_cols();
+        neighbors(row, col)
+            .into_iter()
+            .filter(move |&(row, col)| row < n_rows && col < n_cols)
     }
 }
 
@@ -1093,6 +1101,62 @@ fn day14(part: Part) {
     println!("{}", max_count - min_count);
 }
 
+fn day15(part: Part) {
+    let input = include_str!("day15_input.txt");
+    let n_cols = input.lines().next().unwrap().len();
+    let n_rows = input.trim().len() / n_cols;
+
+    let board = {
+        let mut base_board = Board::new(0, n_rows, n_cols);
+        for (risk, cell) in input
+            .lines()
+            .flat_map(|line| line.bytes())
+            .map(|risk| (risk - b'0') as i32)
+            .zip(base_board.cells())
+        {
+            base_board[cell] = risk;
+        }
+
+        match part {
+            Part::One => base_board,
+            Part::Two => {
+                let mut total_board = Board::new(0, n_rows * 5, n_cols * 5);
+                for (row, col) in total_board.cells() {
+                    let tile_row = (row / n_rows) as i32;
+                    let tile_col = (col / n_cols) as i32;
+                    let risk = base_board[(row % n_rows, col % n_cols)] + tile_row + tile_col;
+                    let risk = if risk > 9 { risk - 9 } else { risk };
+                    total_board[(row, col)] = risk;
+                }
+                total_board
+            }
+        }
+    };
+    let dest = (board.n_cols() - 1, board.n_rows() - 1);
+
+    // Dijkstra's algorithm
+    let mut already_visited = HashSet::new();
+    let mut next_node = BinaryHeap::new();
+
+    already_visited.insert((0, 0));
+    next_node.push((Reverse(0), (0, 0)));
+
+    let total_risk = loop {
+        let (Reverse(path_len), cell) = next_node.pop().unwrap();
+        if cell == dest {
+            break path_len;
+        }
+
+        for neighbor in board.neighbors(cell) {
+            if already_visited.insert(neighbor) {
+                next_node.push((Reverse(path_len + board[neighbor]), neighbor));
+            }
+        }
+    };
+
+    println!("{}", total_risk);
+}
+
 #[derive(StructOpt)]
 struct Opt {
     day: u8,
@@ -1131,6 +1195,8 @@ fn main() {
         (13, 2) => day13(Part::Two),
         (14, 1) => day14(Part::One),
         (14, 2) => day14(Part::Two),
+        (15, 1) => day15(Part::One),
+        (15, 2) => day15(Part::Two),
         _ => println!("not yet implemented or doesn't exist"),
     }
 }
