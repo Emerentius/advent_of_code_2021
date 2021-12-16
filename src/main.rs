@@ -1,6 +1,7 @@
 #![feature(drain_filter)]
 
 use std::hash::Hash;
+use std::str::FromStr;
 use std::{
     cmp::{max, min, Reverse},
     collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
@@ -14,6 +15,18 @@ use itertools::Itertools;
 enum Part {
     One,
     Two,
+}
+
+impl FromStr for Part {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Part::One),
+            "2" => Ok(Part::Two),
+            _ => Err("only part 1 and 2 exist".to_owned()),
+        }
+    }
 }
 
 fn day1(part: Part) {
@@ -1159,44 +1172,29 @@ fn day15(part: Part) {
 
 #[derive(StructOpt)]
 struct Opt {
+    #[structopt(parse(try_from_str = parse_day))]
     day: u8,
-    part: u8,
+    part: Part,
+}
+
+fn parse_day(day: &str) -> Result<u8, Box<dyn std::error::Error>> {
+    match day.parse()? {
+        day @ 1..=25 => Ok(day),
+        _ => Err(format!("must be in range 1-25").into()),
+    }
 }
 
 fn main() {
     let opt = Opt::from_args();
 
-    match (opt.day, opt.part) {
-        (1, 1) => day1(Part::One),
-        (1, 2) => day1(Part::Two),
-        (2, 1) => day2(Part::One),
-        (2, 2) => day2(Part::Two),
-        (3, 1) => day3(Part::One),
-        (3, 2) => day3(Part::Two),
-        (4, 1) => day4(Part::One),
-        (4, 2) => day4(Part::Two),
-        (5, 1) => day5(Part::One),
-        (5, 2) => day5(Part::Two),
-        (6, 1) => day6(Part::One),
-        (6, 2) => day6(Part::Two),
-        (7, 1) => day7(Part::One),
-        (7, 2) => day7(Part::Two),
-        (8, 1) => day8(Part::One),
-        (8, 2) => day8(Part::Two),
-        (9, 1) => day9(Part::One),
-        (9, 2) => day9(Part::Two),
-        (10, 1) => day10(Part::One),
-        (10, 2) => day10(Part::Two),
-        (11, 1) => day11(Part::One),
-        (11, 2) => day11(Part::Two),
-        (12, 1) => day12(Part::One),
-        (12, 2) => day12(Part::Two),
-        (13, 1) => day13(Part::One),
-        (13, 2) => day13(Part::Two),
-        (14, 1) => day14(Part::One),
-        (14, 2) => day14(Part::Two),
-        (15, 1) => day15(Part::One),
-        (15, 2) => day15(Part::Two),
-        _ => println!("not yet implemented or doesn't exist"),
+    let day_fns = [
+        day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
+        day15,
+    ];
+
+    if let Some(day_fn) = day_fns.get((opt.day - 1) as usize) {
+        day_fn(opt.part);
+    } else {
+        println!("not yet implemented")
     }
 }
