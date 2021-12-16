@@ -1170,6 +1170,182 @@ fn day15(part: Part) {
     println!("{}", total_risk);
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum PacketContent {
+    Literal(u64),
+    Operator {
+        type_id: u8,
+        subpackets: Vec<Packet>,
+    },
+}
+
+fn be_bits_to_num(bits: &[bool]) -> u64 {
+    bits.iter().fold(0, |num, &bit| (num << 1) + bit as u64)
+}
+
+impl PacketContent {
+    fn parse(mut bits: &[bool]) -> Result<(Self, &[bool]), ()> {
+        let packet_type_id = be_bits_to_num(&bits[0..3]) as u8;
+        bits = &bits[3..];
+        let content = match packet_type_id {
+            4 => {
+                let mut num = 0;
+                for (limb_nr, limb) in bits.chunks_exact(5).enumerate() {
+                    num = (num << 4) + be_bits_to_num(&limb[1..5]);
+
+                    if !limb[0] {
+                        bits = &bits[(limb_nr + 1) * 5..];
+                        break;
+                    }
+                    assert!(
+                        limb_nr * 4 < 64,
+                        "Literal value requires a bigger output integer type"
+                    );
+                }
+                PacketContent::Literal(num)
+            }
+            _ => {
+                let length_type_id = bits[0]; // 0 == false, 1 == true
+
+                let mut subpackets = vec![];
+                if length_type_id {
+                    let n_subpackets = be_bits_to_num(&bits[1..12]);
+                    bits = &bits[12..];
+                    for _ in 0..n_subpackets {
+                        let (packet, remaining_input) = Packet::parse(&bits)?;
+                        bits = remaining_input;
+                        subpackets.push(packet);
+                    }
+                } else {
+                    let n_total_subpacket_length_in_bits = be_bits_to_num(&bits[1..16]);
+                    bits = &bits[16..];
+                    let mut n_length_subpackets_so_far = 0;
+                    while n_length_subpackets_so_far < n_total_subpacket_length_in_bits {
+                        let (packet, remaining_input) = Packet::parse(&bits)?;
+                        n_length_subpackets_so_far += (bits.len() - remaining_input.len()) as u64;
+                        bits = remaining_input;
+                        subpackets.push(packet);
+                    }
+                }
+                PacketContent::Operator {
+                    type_id: packet_type_id,
+                    subpackets,
+                }
+            }
+        };
+
+        Ok((content, bits))
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Packet {
+    version: u8,
+    content: PacketContent,
+}
+
+impl Packet {
+    fn parse_str(input: &str) -> Result<Self, ()> {
+        let bit_input = hexadecimal_to_bit_vec(input);
+        Self::parse(&bit_input).map(|(packet, _remaining_input)| {
+            assert!(_remaining_input.iter().all(|&bit| bit == false));
+            packet
+        })
+    }
+
+    fn parse(bits: &[bool]) -> Result<(Self, &[bool]), ()> {
+        let version = bits[..3].iter().fold(0, |num, &bit| (num << 1) + bit as u8);
+        let (content, remaining_input) = PacketContent::parse(&bits[3..])?;
+        Ok((Self { version, content }, remaining_input))
+    }
+}
+
+fn hexadecimal_to_bit_vec(input: &str) -> Vec<bool> {
+    let bit_vec = input
+        .trim()
+        .as_bytes()
+        .iter()
+        .map(|&b| match b {
+            b'0'..=b'9' => b - b'0',
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => unreachable!(),
+        })
+        .flat_map(|byte| {
+            (0..4)
+                .rev()
+                .map(move |bit_pos| ((byte >> bit_pos) & 1) != 0)
+        })
+        .collect_vec();
+    bit_vec
+}
+
+fn day16(part: Part) {
+    let input = include_str!("day16_input.txt");
+    let packet = Packet::parse_str(input).unwrap();
+
+    match part {
+        Part::One => {
+            fn version_sum(packet: Packet) -> u64 {
+                let subpacket_version_sum = match packet.content {
+                    PacketContent::Literal(_) => 0,
+                    PacketContent::Operator { subpackets, .. } => {
+                        subpackets.into_iter().map(version_sum).sum::<u64>()
+                    }
+                };
+                packet.version as u64 + subpacket_version_sum
+            }
+            println!("{}", version_sum(packet));
+        }
+        Part::Two => {
+            todo!()
+        }
+    }
+}
+
+#[test]
+fn test_day16_parse_literal() {
+    assert_eq!(
+        Packet::parse_str("D2FE28").unwrap(),
+        Packet {
+            version: 6,
+            content: PacketContent::Literal(2021)
+        }
+    );
+}
+
+#[test]
+fn test_day16_parse_simple_operator() {
+    assert_eq!(
+        Packet::parse_str("38006F45291200").unwrap(),
+        Packet {
+            version: 1,
+            content: PacketContent::Operator {
+                type_id: 6,
+                subpackets: vec![
+                    Packet {
+                        version: 6,
+                        content: PacketContent::Literal(10)
+                    },
+                    Packet {
+                        version: 2,
+                        content: PacketContent::Literal(20)
+                    }
+                ]
+            }
+        }
+    );
+}
+
+#[test]
+fn test_hexadecimal_to_bits() {
+    assert_eq!(
+        hexadecimal_to_bit_vec("D2FE28"),
+        [1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0,]
+            .map(|b| b == 1)
+            .to_owned(),
+    );
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1189,7 +1365,7 @@ fn main() {
 
     let day_fns = [
         day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
-        day15,
+        day15, day16,
     ];
 
     if let Some(day_fn) = day_fns.get((opt.day - 1) as usize) {
