@@ -1258,6 +1258,28 @@ impl Packet {
         let (content, remaining_input) = PacketContent::parse(&bits[3..])?;
         Ok((Self { version, content }, remaining_input))
     }
+
+    fn value(&self) -> u64 {
+        match &self.content {
+            &PacketContent::Literal(val) => val,
+            PacketContent::Operator {
+                type_id,
+                subpackets,
+            } => {
+                let sub_vals = subpackets.iter().map(Packet::value);
+                match type_id {
+                    0 => sub_vals.sum(),
+                    1 => sub_vals.product(),
+                    2 => sub_vals.min().unwrap(),
+                    3 => sub_vals.max().unwrap(),
+                    5 => (subpackets[0].value() > subpackets[1].value()) as u64,
+                    6 => (subpackets[0].value() < subpackets[1].value()) as u64,
+                    7 => (subpackets[0].value() == subpackets[1].value()) as u64,
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
 }
 
 fn hexadecimal_to_bit_vec(input: &str) -> Vec<bool> {
@@ -1297,7 +1319,7 @@ fn day16(part: Part) {
             println!("{}", version_sum(packet));
         }
         Part::Two => {
-            todo!()
+            println!("{}", packet.value());
         }
     }
 }
