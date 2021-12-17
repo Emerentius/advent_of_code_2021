@@ -1368,6 +1368,70 @@ fn test_hexadecimal_to_bits() {
     );
 }
 
+fn day17(part: Part) {
+    let input = include_str!("day17_input.txt");
+    let (_, x_min, x_max, y_min, y_max) = lazy_regex::regex_captures!(
+        r"target area: x=(-?\d+)\.\.(-?\d+), y=(-?\d+)\.\.(-?\d+)",
+        input.trim()
+    )
+    .unwrap();
+    let x_min = parse_num(x_min);
+    let x_max = parse_num(x_max);
+    let y_min = parse_num(y_min);
+    let y_max = parse_num(y_max);
+
+    match part {
+        Part::One => {
+            // with a positive velocity, the probe will first climb up to vy * (vy + 1) / 2
+            // linger for one step while its velocity goes to -1
+            // and then it falls back down, visiting all the same heights but with vy = -vy_climb(y) - 1.
+            // It will also reach y = 0 again.
+            // At y = 0, the maximum speed in negative direction that doesn't overshoot the area is vy = y_min.
+            let y_vel_max = -(y_min + 1);
+            let y_max = y_vel_max * (y_vel_max + 1) / 2;
+
+            println!("{}", y_max);
+        }
+        Part::Two => {
+            let y_probe_positions = |y_vel_initial| {
+                std::iter::successors(Some((0, y_vel_initial)), |(y, vy)| Some((y + vy, vy - 1)))
+            };
+            let x_probe_positions = |x_vel_initial: i64| {
+                std::iter::successors(Some((0, x_vel_initial)), |(x, vx)| {
+                    Some((x + vx, vx - vx.signum()))
+                })
+            };
+
+            // x and y positions and velocities act independently
+            // Per dimension, find velocities that could end up in the target strip.
+            // Filter the combination of those for velocities that actually do.
+            let potential_initial_vy = y_min..=-(y_min + 1);
+            let will_end_in_xrange = |vx| {
+                x_probe_positions(vx)
+                    .take_while(|&(_, vx)| vx > 0)
+                    .take_while(|&(x, _)| x <= x_max)
+                    .any(|(x, _)| (x_min..=x_max).contains(&x))
+            };
+            let potential_initial_vx = (1..=x_max).filter(|&vx| will_end_in_xrange(vx));
+
+            let solution = itertools::iproduct!(potential_initial_vx, potential_initial_vy)
+                .filter(|&(vx, vy)| {
+                    x_probe_positions(vx)
+                        .zip(y_probe_positions(vy))
+                        .take_while(|&((x, vx), (y, _))| {
+                            x <= x_max && (x >= x_min || vx != 0) && y >= y_min
+                        })
+                        .any(|((x, _), (y, _))| {
+                            (y_min..=y_max).contains(&y) && (x_min..=x_max).contains(&x)
+                        })
+                })
+                .count();
+
+            println!("{}", solution);
+        }
+    }
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1387,7 +1451,7 @@ fn main() {
 
     let day_fns = [
         day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
-        day15, day16,
+        day15, day16, day17,
     ];
 
     if let Some(day_fn) = day_fns.get((opt.day - 1) as usize) {
