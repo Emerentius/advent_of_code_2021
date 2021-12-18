@@ -1,5 +1,6 @@
 #![feature(drain_filter)]
 
+use nom::IResult;
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
@@ -1432,6 +1433,163 @@ fn day17(part: Part) {
     }
 }
 
+#[derive(Debug)]
+struct SnailfishNumber {
+    left: Box<NumberElement>,
+    right: Box<NumberElement>,
+}
+
+impl SnailfishNumber {
+    fn cursor_start(&mut self) -> TreeCursor<'_> {
+        TreeCursor {
+            current: self,
+            position: Position::Left,
+            stack: vec![],
+        }
+    }
+
+    fn cursor_end(&mut self) -> TreeCursor<'_> {
+        TreeCursor {
+            current: self,
+            position: Position::Right,
+            stack: vec![],
+        }
+    }
+}
+
+#[derive(Debug)]
+enum NumberElement {
+    Number(i64),
+    Pair(SnailfishNumber),
+}
+
+fn parse_snail_fish_number(i: &str) -> IResult<&str, SnailfishNumber> {
+    use nom::character::complete::*;
+    let (i, _) = char('[')(i)?;
+    let (i, left) = parse_number_element(i)?;
+    let (i, _) = char(',')(i)?;
+    let (i, right) = parse_number_element(i)?;
+    let (i, _) = char(']')(i)?;
+    Ok((
+        i,
+        SnailfishNumber {
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+    ))
+}
+
+#[derive(Copy, Clone, Debug)]
+enum Position {
+    Left,  // left of left child
+    Mid,   // between left and right child
+    Right, // right of right child
+}
+
+struct TreeCursor<'a> {
+    current: &'a mut SnailfishNumber,
+    position: Position,
+    // must only ever access the last element
+    stack: Vec<(*mut SnailfishNumber, Position)>,
+}
+
+impl<'a> TreeCursor<'a> {
+    fn borrowing_clone(&mut self) -> TreeCursor<'_> {
+        TreeCursor {
+            current: &mut self.current,
+            position: self.position,
+            stack: self.stack.clone(),
+        }
+    }
+
+    fn _move_up(&mut self) -> Option<()> {
+        let (prev, prev_pos) = self.stack.pop()?;
+        self.position = prev_pos;
+        self.current = unsafe { &mut *prev };
+        Some(())
+    }
+
+    fn _advance(&mut self, move_right: bool) -> Option<&mut i64> {
+        loop {
+            let current_ptr = self.current as *mut _;
+
+            let (next, new_pos) = if move_right {
+                match self.position {
+                    Position::Left => (&mut *self.current.left, Position::Mid),
+                    Position::Mid => (&mut *self.current.right, Position::Right),
+                    Position::Right => {
+                        self._move_up()?;
+                        continue;
+                    }
+                }
+            } else {
+                match self.position {
+                    Position::Right => (&mut *self.current.right, Position::Mid),
+                    Position::Mid => (&mut *self.current.left, Position::Left),
+                    Position::Left => {
+                        self._move_up()?;
+                        continue;
+                    }
+                }
+            };
+
+            self.position = new_pos;
+
+            match next {
+                NumberElement::Pair(pair) => {
+                    self.stack.push((current_ptr, self.position));
+                    // Extend the lifetime. We got this reference through an &'_ mut &'a mut _
+                    // so we know it will live for 'a, but are limited by the borrow checker to the anonymous, shorter lifetime.
+                    // It's safe to extend it so long as we don't hand it out with the long lifetime as that would allow
+                    // the caller to get multiple mutable references.
+                    let extended_lifetime_pair = unsafe { std::mem::transmute(pair) };
+                    self.current = extended_lifetime_pair;
+                    self.position = if move_right {
+                        Position::Left
+                    } else {
+                        Position::Right
+                    };
+                }
+                NumberElement::Number(num) => return Some(num),
+            }
+        }
+    }
+
+    fn next(&mut self) -> Option<&mut i64> {
+        self._advance(true)
+    }
+
+    // TODO: unify common parts with next()
+    fn prev(&mut self) -> Option<&mut i64> {
+        self._advance(false)
+    }
+}
+
+fn parse_number_element(i: &str) -> IResult<&str, NumberElement> {
+    use nom::combinator::map;
+    let parse_number = map(nom::character::complete::i64, NumberElement::Number);
+    let parse_pair = map(parse_snail_fish_number, NumberElement::Pair);
+    nom::branch::alt((parse_number, parse_pair))(i)
+}
+
+fn day18(part: Part) {
+    let input = include_str!("day18_input.txt");
+    let mut numbers = input
+        .lines()
+        .map(|num| parse_snail_fish_number(num).unwrap().1)
+        .collect_vec();
+    println!("{:?}", numbers[0]);
+
+    let mut cursor = numbers[0].cursor_start();
+    while let Some(next) = cursor.next() {
+        println!("{}", next);
+    }
+    println!();
+    while let Some(prev) = cursor.prev() {
+        println!("{}", prev);
+    }
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1451,7 +1609,7 @@ fn main() {
 
     let day_fns = [
         day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
-        day15, day16, day17,
+        day15, day16, day17, day18,
     ];
 
     if let Some(day_fn) = day_fns.get((opt.day - 1) as usize) {
