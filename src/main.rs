@@ -2,6 +2,7 @@
 
 use nom::IResult;
 use std::hash::Hash;
+use std::ops::Add;
 use std::str::FromStr;
 use std::{
     cmp::{max, min, Reverse},
@@ -11,6 +12,9 @@ use std::{
 use structopt::StructOpt;
 
 use itertools::Itertools;
+
+#[cfg(test)]
+mod day18;
 
 #[derive(PartialEq, Eq)]
 enum Part {
@@ -1433,75 +1437,175 @@ fn day17(part: Part) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum NumberNode {
+    Number(i64),
+    Pair(Box<(NumberNode, NumberNode)>),
+}
+
+impl NumberNode {
+    fn magnitude(&self) -> i64 {
+        match self {
+            &NumberNode::Number(num) => num,
+            NumberNode::Pair(pair) => {
+                let (left, right) = &**pair;
+                3 * left.magnitude() + 2 * right.magnitude()
+            }
+        }
+    }
+}
+
+impl FromStr for SnailfishNumber {
+    type Err = Box<dyn std::error::Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn parse_pair(i: &str) -> IResult<&str, NumberNode> {
+            use nom::character::complete::*;
+            let (i, _) = char('[')(i)?;
+            let (i, left) = parse_number_node(i)?;
+            let (i, _) = char(',')(i)?;
+            let (i, right) = parse_number_node(i)?;
+            let (i, _) = char(']')(i)?;
+            Ok((i, NumberNode::Pair(Box::new((left, right)))))
+        }
+
+        fn parse_number_node(i: &str) -> IResult<&str, NumberNode> {
+            use nom::combinator::map;
+            let parse_number = map(nom::character::complete::i64, NumberNode::Number);
+            nom::branch::alt((parse_number, parse_pair))(i)
+        }
+
+        let (_, pair) = parse_pair(s).map_err(|e| e.to_owned())?;
+        Ok(SnailfishNumber { root: pair })
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Position {
+    Left,
+    Mid,
+    Right,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SnailfishNumber {
-    left: Box<NumberElement>,
-    right: Box<NumberElement>,
+    // Should be a pair, but a user of the cursor
+    // could violate it by replacing the root node with a number.
+    root: NumberNode,
 }
 
 impl SnailfishNumber {
+    fn explode_nums(&mut self) {
+        use NumberNode::*;
+        let mut cursor = self.cursor_start();
+        while let Some((elem, depth)) = cursor.next() {
+            match elem {
+                NumberNode::Pair(pair) if depth >= 4 => {
+                    let (left, right) = match &**pair {
+                        &(Number(left), Number(right)) => (left, right),
+                        _ => unreachable!(),
+                    };
+                    *elem = NumberNode::Number(0);
+                    if let Some(next) = cursor.borrowing_clone().next_num() {
+                        *next += right;
+                    }
+                    if let Some(prev) = cursor.borrowing_clone().prev_num() {
+                        *prev += left;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // returns true if explosions are needed
+    fn split_nums(&mut self) -> bool {
+        use NumberNode::*;
+        let mut cursor = self.cursor_start();
+        while let Some((elem, depth)) = cursor.next() {
+            match elem {
+                &mut NumberNode::Number(num) if num >= 10 => {
+                    let left = num / 2;
+                    let right = num - left;
+                    *elem = Pair(Box::new((Number(left), Number(right))));
+
+                    // After a number is split, the result may have to be exploded or split again.
+                    // Just `return true` would work. This is somewhat optimized already to avoid
+                    // a lot of unnecessary iteration, but it could be optimized a lot more.
+                    // The explosion could be done immediately. The cursor would need to be backtracked
+                    // to the last num to check if it needs to be split.
+                    if depth >= 4 {
+                        // need to explode stuff again
+                        return true;
+                    }
+                    if left >= 10 {
+                        // Move two to the left so we revisit the left number of the new pair again.
+                        cursor.prev();
+                        cursor.prev();
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    fn reduce(&mut self) {
+        loop {
+            self.explode_nums();
+            if !self.split_nums() {
+                break;
+            }
+        }
+    }
+
+    fn magnitude(&self) -> i64 {
+        self.root.magnitude()
+    }
+
     fn cursor_start(&mut self) -> TreeCursor<'_> {
         TreeCursor {
-            current: self,
+            current: &mut self.root,
             position: Position::Left,
-            stack: vec![],
-        }
-    }
-
-    fn cursor_end(&mut self) -> TreeCursor<'_> {
-        TreeCursor {
-            current: self,
-            position: Position::Right,
+            moving_down: true,
             stack: vec![],
         }
     }
 }
 
-#[derive(Debug)]
-enum NumberElement {
-    Number(i64),
-    Pair(SnailfishNumber),
-}
+impl Add for SnailfishNumber {
+    type Output = Self;
 
-fn parse_snail_fish_number(i: &str) -> IResult<&str, SnailfishNumber> {
-    use nom::character::complete::*;
-    let (i, _) = char('[')(i)?;
-    let (i, left) = parse_number_element(i)?;
-    let (i, _) = char(',')(i)?;
-    let (i, right) = parse_number_element(i)?;
-    let (i, _) = char(']')(i)?;
-    Ok((
-        i,
-        SnailfishNumber {
-            left: Box::new(left),
-            right: Box::new(right),
-        },
-    ))
-}
-
-#[derive(Copy, Clone, Debug)]
-enum Position {
-    Left,  // left of left child
-    Mid,   // between left and right child
-    Right, // right of right child
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut new = SnailfishNumber {
+            root: NumberNode::Pair(Box::new((self.root, rhs.root))),
+        };
+        new.reduce();
+        new
+    }
 }
 
 struct TreeCursor<'a> {
-    current: &'a mut SnailfishNumber,
+    current: &'a mut NumberNode,
     position: Position,
+    moving_down: bool,
     // must only ever access the last element
-    stack: Vec<(*mut SnailfishNumber, Position)>,
+    stack: Vec<(*mut NumberNode, Position)>,
 }
+
+type NodeDepth = usize;
 
 impl<'a> TreeCursor<'a> {
     fn borrowing_clone(&mut self) -> TreeCursor<'_> {
         TreeCursor {
             current: &mut self.current,
-            position: self.position,
             stack: self.stack.clone(),
+            ..*self
         }
     }
 
+    #[must_use]
+    // helper for _advance
     fn _move_up(&mut self) -> Option<()> {
         let (prev, prev_pos) = self.stack.pop()?;
         self.position = prev_pos;
@@ -1509,84 +1613,113 @@ impl<'a> TreeCursor<'a> {
         Some(())
     }
 
-    fn _advance(&mut self, move_right: bool) -> Option<&mut i64> {
+    fn _advance(&mut self, move_right: bool) -> Option<(&mut NumberNode, NodeDepth)> {
+        use NumberNode::*;
+        use Position::*;
+
         loop {
-            let current_ptr = self.current as *mut _;
-
-            let (next, new_pos) = if move_right {
-                match self.position {
-                    Position::Left => (&mut *self.current.left, Position::Mid),
-                    Position::Mid => (&mut *self.current.right, Position::Right),
-                    Position::Right => {
-                        self._move_up()?;
-                        continue;
-                    }
-                }
-            } else {
-                match self.position {
-                    Position::Right => (&mut *self.current.right, Position::Mid),
-                    Position::Mid => (&mut *self.current.left, Position::Left),
-                    Position::Left => {
-                        self._move_up()?;
-                        continue;
-                    }
-                }
-            };
-
-            self.position = new_pos;
-
-            match next {
-                NumberElement::Pair(pair) => {
+            let current_ptr = self.current as *mut NumberNode;
+            match (&mut *self.current, self.position, self.moving_down) {
+                (Pair(pair), Left | Right, true) => {
                     self.stack.push((current_ptr, self.position));
-                    // Extend the lifetime. We got this reference through an &'_ mut &'a mut _
-                    // so we know it will live for 'a, but are limited by the borrow checker to the anonymous, shorter lifetime.
-                    // It's safe to extend it so long as we don't hand it out with the long lifetime as that would allow
-                    // the caller to get multiple mutable references.
-                    let extended_lifetime_pair = unsafe { std::mem::transmute(pair) };
-                    self.current = extended_lifetime_pair;
-                    self.position = if move_right {
-                        Position::Left
-                    } else {
-                        Position::Right
-                    };
+                    let pair = &mut **pair;
+                    let pair = unsafe { &mut *(pair as *mut (_, _)) };
+                    let (left, right) = pair;
+
+                    self.current = if self.position == Left { left } else { right };
+                    self.position = if move_right { Left } else { Right };
                 }
-                NumberElement::Number(num) => return Some(num),
+                (Number(_), _, true) => {
+                    self.moving_down = false;
+                    self.position = Mid; // if this node is replaced with a pair, it will be the right position
+                    return Some((&mut self.current, self.stack.len()));
+                }
+                (Number(_), _, false) => {
+                    // Numbers always have a parent in this puzzle,
+                    // but I'm allowing top-level numbers as well
+                    self._move_up()?;
+                }
+                (Pair(_), Left | Right, false) => {
+                    let pos = self.position;
+
+                    if move_right && pos == Left || (!move_right && pos == Right) {
+                        self.position = Mid;
+                        return Some((&mut self.current, self.stack.len()));
+                    } else {
+                        if self._move_up().is_none() {
+                            // reached ending, reset to initial state
+                            // for a cursor starting at that end
+                            self.moving_down = true;
+                            return None;
+                        }
+                    }
+                }
+                (Pair(_), Mid, false) => {
+                    self.position = if move_right { Right } else { Left };
+                    self.moving_down = true;
+                }
+                (Pair(_), Mid, true) => unreachable!(),
             }
         }
     }
 
-    fn next(&mut self) -> Option<&mut i64> {
+    fn _advance_number(&mut self, move_right: bool) -> Option<&mut i64> {
+        // find_map(), but manually
+        loop {
+            match self._advance(move_right)? {
+                // This is safe, but the borrow checker can't deal with conditional return of borrows
+                // even with NLLs
+                // https://github.com/rust-lang/rust/issues/58910
+                // The BC will keep `num` and therefore `self` borrowed across loop iterations.
+                //
+                // Lengthen lifetime manually
+                (NumberNode::Number(num), _) => return Some(unsafe { &mut *(num as *mut i64) }),
+                _ => (),
+            };
+        }
+    }
+
+    fn next(&mut self) -> Option<(&mut NumberNode, NodeDepth)> {
         self._advance(true)
     }
 
-    // TODO: unify common parts with next()
-    fn prev(&mut self) -> Option<&mut i64> {
+    fn prev(&mut self) -> Option<(&mut NumberNode, NodeDepth)> {
         self._advance(false)
     }
-}
 
-fn parse_number_element(i: &str) -> IResult<&str, NumberElement> {
-    use nom::combinator::map;
-    let parse_number = map(nom::character::complete::i64, NumberElement::Number);
-    let parse_pair = map(parse_snail_fish_number, NumberElement::Pair);
-    nom::branch::alt((parse_number, parse_pair))(i)
+    fn next_num(&mut self) -> Option<&mut i64> {
+        self._advance_number(true)
+    }
+
+    fn prev_num(&mut self) -> Option<&mut i64> {
+        self._advance_number(false)
+    }
 }
 
 fn day18(part: Part) {
     let input = include_str!("day18_input.txt");
-    let mut numbers = input
-        .lines()
-        .map(|num| parse_snail_fish_number(num).unwrap().1)
-        .collect_vec();
-    println!("{:?}", numbers[0]);
+    let numbers: Vec<SnailfishNumber> = input.lines().map(|num| num.parse().unwrap()).collect_vec();
 
-    let mut cursor = numbers[0].cursor_start();
-    while let Some(next) = cursor.next() {
-        println!("{}", next);
-    }
-    println!();
-    while let Some(prev) = cursor.prev() {
-        println!("{}", prev);
+    match part {
+        Part::One => {
+            let num = numbers.into_iter().fold1(std::ops::Add::add).unwrap();
+            println!("{}", num.magnitude());
+        }
+        Part::Two => {
+            let number_pairs = numbers.iter().enumerate().flat_map(|(i, num1)| {
+                numbers
+                    .iter()
+                    .enumerate()
+                    .filter(move |&(j, _)| i != j)
+                    .map(move |(_, num2)| (num1, num2))
+            });
+            let max_magnitude = number_pairs
+                .map(|(num1, num2)| (num1.clone() + num2.clone()).magnitude())
+                .max()
+                .unwrap();
+
+            println!("{}", max_magnitude);
+        }
     }
 }
 
