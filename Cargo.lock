@@ -10,6 +10,7 @@ dependencies = [
  "lazy-regex",
  "nalgebra",
  "nom",
+ "once_cell",
  "structopt",
 ]
 

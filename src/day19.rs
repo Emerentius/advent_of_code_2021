@@ -3,23 +3,30 @@ use std::collections::HashSet;
 use crate::{parse_num, Part};
 use itertools::Itertools;
 use nalgebra::base::{Matrix3, Vector3};
+use once_cell::sync::OnceCell;
+
+// point or difference
+type Vec3 = Vector3<i64>;
+type RotMatrix = Matrix3<i64>;
 
 struct Region {
-    visible_beacons: HashSet<Vector3<i64>>,
-    scanner_positions: Vec<Vector3<i64>>,
+    visible_beacons: HashSet<Vec3>,
+    scanner_positions: Vec<Vec3>,
 }
 
-fn rotation_matrices() -> Vec<Matrix3<i64>> {
+static ALL_ROTATIONS: OnceCell<Vec<RotMatrix>> = OnceCell::new();
+
+fn rotation_matrices() -> Vec<RotMatrix> {
     // find all rotation matrices by first selecting one of the 6 directions for the x vector
     // and then picking one of the 4 directions that are orthogonal to it for the y vector
     // z = cross(x, y)
     let orientations = [
-        Vector3::new(1, 0, 0i64),
-        Vector3::new(-1, 0, 0),
-        Vector3::new(0, 1, 0),
-        Vector3::new(0, -1, 0),
-        Vector3::new(0, 0, 1),
-        Vector3::new(0, 0, -1),
+        Vec3::new(1, 0, 0i64),
+        Vec3::new(-1, 0, 0),
+        Vec3::new(0, 1, 0),
+        Vec3::new(0, -1, 0),
+        Vec3::new(0, 0, 1),
+        Vec3::new(0, 0, -1),
     ];
     orientations
         .into_iter()
@@ -42,10 +49,10 @@ fn rotation_matrices() -> Vec<Matrix3<i64>> {
 }
 
 // Returns rotation and offset that moves reg2 onto reg1.
-fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(Matrix3<i64>, Vector3<i64>)> {
+fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(RotMatrix, Vec3)> {
     for b1 in &reg1.visible_beacons {
         for b2 in &reg2.visible_beacons {
-            for rotation in rotation_matrices() {
+            for rotation in ALL_ROTATIONS.get().unwrap() {
                 let b2 = rotation * b2;
                 let offset = b2 - b1;
                 let potentially_common_beacons = reg2
@@ -54,7 +61,7 @@ fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(Matrix3<i64>, Vect
                     .map(|b| rotation * b - offset)
                     .filter(|b| reg1.visible_beacons.contains(b));
                 if potentially_common_beacons.clone().count() >= 12 {
-                    return Some((rotation, offset));
+                    return Some((*rotation, offset));
                 }
             }
         }
@@ -63,20 +70,13 @@ fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(Matrix3<i64>, Vect
 }
 
 // could avoid some cloning here
-fn try_merge(reg1: &Region, reg2: &Region) -> Option<Region> {
-    let (rotation, offset) = find_merge_params(reg1, reg2)?;
-    let mut visible_beacons = reg1.visible_beacons.clone();
-    visible_beacons.extend(reg2.visible_beacons.iter().map(|&b| rotation * b - offset));
-    let mut scanner_positions = reg1.scanner_positions.clone();
-    scanner_positions.extend(
-        reg2.scanner_positions
-            .iter()
-            .map(|&pos| rotation * pos - offset),
-    );
-    Some(Region {
-        visible_beacons,
-        scanner_positions,
-    })
+fn merge(mut reg1: Region, reg2: Region, rotation: RotMatrix, offset: Vec3) -> Region {
+    let new_pos = |pos| rotation * pos - offset;
+    reg1.visible_beacons
+        .extend(reg2.visible_beacons.into_iter().map(new_pos));
+    reg1.scanner_positions
+        .extend(reg2.scanner_positions.into_iter().map(new_pos));
+    reg1
 }
 
 pub fn day19(part: Part) {
@@ -90,22 +90,27 @@ pub fn day19(part: Part) {
                 .map(|beacon| {
                     let (_, x, y, z) =
                         lazy_regex::regex_captures!(r"(\-?\d+),(\-?\d+),(\-?\d+)", beacon).unwrap();
-                    Vector3::new(parse_num(x), parse_num(y), parse_num(z))
+                    Vec3::new(parse_num(x), parse_num(y), parse_num(z))
                 })
                 .collect();
             Region {
                 visible_beacons,
-                scanner_positions: vec![Vector3::new(0, 0, 0)],
+                scanner_positions: vec![Vec3::new(0, 0, 0)],
             }
         })
         .collect_vec();
 
+    ALL_ROTATIONS.set(rotation_matrices()).unwrap();
+
     'outer: while regions.len() > 1 {
         for reg1 in 0..regions.len() {
             for reg2 in reg1 + 1..regions.len() {
-                if let Some(merged_region) = try_merge(&regions[reg1], &regions[reg2]) {
-                    regions[reg1] = merged_region;
-                    regions.swap_remove(reg2);
+                if let Some((rotation, offset)) = find_merge_params(&regions[reg1], &regions[reg2])
+                {
+                    let region2 = regions.swap_remove(reg2);
+                    let region1 = regions.swap_remove(reg1);
+                    let new_region = merge(region1, region2, rotation, offset);
+                    regions.push(new_region);
                     continue 'outer;
                 }
             }
