@@ -1,4 +1,5 @@
 #![feature(drain_filter)]
+#![feature(stmt_expr_attributes)]
 
 use nom::IResult;
 use std::fmt::Display;
@@ -17,8 +18,10 @@ use itertools::Itertools;
 #[cfg(test)]
 mod day18;
 
+mod day19;
+
 #[derive(PartialEq, Eq)]
-enum Part {
+pub enum Part {
     One,
     Two,
 }
@@ -1873,7 +1876,7 @@ fn main() {
         day16,
         day17,
         day18,
-        to_be_implemented,
+        day19::day19,
         day20,
     ];
 

@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 itertools = "0.10.1"
 lazy-regex = "2.2.2"
+nalgebra = "0.29.0"
 nom = "7.1.0"
 structopt = "0.3.25"
