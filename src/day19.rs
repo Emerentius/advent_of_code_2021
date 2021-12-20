@@ -33,15 +33,14 @@ static ALL_ROTATIONS: Lazy<Vec<RotMatrix>> = Lazy::new(|| {
 
 // Returns rotation and offset that moves reg2 onto reg1.
 fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(RotMatrix, Vec3)> {
-    for b1 in &reg1.beacons {
-        for b2 in &reg2.beacons {
-            for rotation in &*ALL_ROTATIONS {
-                let b2 = rotation * b2;
+    for rotation in &*ALL_ROTATIONS {
+        let rotated_beacons2 = reg2.beacons.iter().map(|b| rotation * b).collect_vec();
+        for b2 in &rotated_beacons2 {
+            for b1 in &reg1.beacons {
                 let offset = b2 - b1;
-                let potentially_common_beacons = reg2
-                    .beacons
+                let potentially_common_beacons = rotated_beacons2
                     .iter()
-                    .map(|b| rotation * b - offset)
+                    .map(|&b| b - offset)
                     .filter(|b| reg1.beacons.contains(b));
                 if potentially_common_beacons.count() >= 12 {
                     return Some((*rotation, offset));
@@ -69,10 +68,8 @@ pub fn day19(part: Part) {
                 .skip(1)
                 .map(|beacon| Vec3::from_iterator(beacon.split(',').map(|num| parse_num(num) as _)))
                 .collect();
-            Region {
-                beacons,
-                scanner: vec![Vec3::zeros()],
-            }
+            let scanner = vec![Vec3::zeros()];
+            Region { beacons, scanner }
         })
         .collect_vec();
 
