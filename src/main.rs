@@ -1,6 +1,7 @@
 #![feature(drain_filter)]
 
 use nom::IResult;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Add;
 use std::str::FromStr;
@@ -931,6 +932,7 @@ fn day12(part: Part) {
 struct Board<T> {
     board: Vec<T>,
     n_cols: usize,
+    n_rows: usize, // board.len() / n_cols
 }
 
 impl<T: Clone> Board<T> {
@@ -938,6 +940,29 @@ impl<T: Clone> Board<T> {
         Board {
             board: vec![default_val; n_rows * n_cols],
             n_cols,
+            n_rows,
+        }
+    }
+}
+
+impl<T> Board<T> {
+    // map each char to an element
+    fn from_str(board: &str, f: impl FnMut(char) -> T) -> Self {
+        let n_cols = board.lines().next().unwrap().len();
+        let n_rows = board.trim().len() / n_cols;
+        let board = board
+            .lines()
+            .flat_map(|line| {
+                assert!(line.len() == n_cols);
+                line.chars()
+            })
+            .map(f)
+            .collect_vec();
+
+        Self {
+            board,
+            n_cols,
+            n_rows,
         }
     }
 
@@ -960,19 +985,41 @@ impl<T: Clone> Board<T> {
             .into_iter()
             .filter(move |&(row, col)| row < n_rows && col < n_cols)
     }
+
+    fn get(&self, (x, y): (usize, usize)) -> Option<&T> {
+        if x >= self.n_cols || y >= self.n_rows {
+            return None;
+        }
+        self.board.get(y * self.n_cols + x)
+    }
 }
 
 impl<T> Index<(usize, usize)> for Board<T> {
     type Output = T;
 
     fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        assert!(x < self.n_cols);
         &self.board[y * self.n_cols + x]
     }
 }
 
 impl<T> IndexMut<(usize, usize)> for Board<T> {
     fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        assert!(x < self.n_cols);
         &mut self.board[y * self.n_cols + x]
+    }
+}
+
+impl Display for Board<bool> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for y in 0..self.n_rows() {
+            for x in 0..self.n_cols() {
+                let print_ch = if self[(x, y)] { '#' } else { '.' };
+                write!(f, "{}", print_ch)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 
@@ -1723,6 +1770,69 @@ fn day18(part: Part) {
     }
 }
 
+struct Image {
+    visible_board: Board<bool>,
+    outside_cells_lit: bool, // cells around the block are either all on or all off
+}
+
+fn day20(part: Part) {
+    let input = include_str!("day20_input.txt");
+    let (algorithm, image) = input.split_once("\n\n").unwrap();
+    let algorithm = algorithm
+        .as_bytes()
+        .iter()
+        .filter(|&&b| b != b'\n') // only necessary for test input
+        .map(|&b| match b {
+            b'#' => true,
+            b'.' => false,
+            _ => unreachable!(),
+        })
+        .collect_vec();
+
+    let mut image = Image {
+        visible_board: Board::from_str(image, |ch| ch == '#'),
+        outside_cells_lit: false,
+    };
+    let apply_algorithm = |image: &Image| {
+        // the algorithm can add pixels along each edge, so add a line of pixels on each side
+        let old_board = &image.visible_board;
+        let mut visible_board = Board::new(false, old_board.n_rows() + 2, old_board.n_cols() + 2);
+        for cell in visible_board.cells() {
+            let (x, y) = cell;
+            let x_old = x as isize - 1;
+            let y_old = y as isize - 1;
+            let idx = itertools::iproduct!(y_old - 1..=y_old + 1, x_old - 1..=x_old + 1)
+                .map(|(y, x)| {
+                    old_board
+                        .get((x as usize, y as usize))
+                        .unwrap_or(&image.outside_cells_lit)
+                })
+                .fold(0, |num, bit| (num << 1) + *bit as usize);
+            visible_board[cell] = algorithm[idx];
+        }
+
+        let outside_cells_idx = if image.outside_cells_lit { 511 } else { 0 };
+        let outside_cells_lit = algorithm[outside_cells_idx];
+        Image {
+            visible_board,
+            outside_cells_lit,
+        }
+    };
+
+    let n_repetitions = match part {
+        Part::One => 2,
+        Part::Two => 50,
+    };
+
+    for _ in 0..n_repetitions {
+        image = apply_algorithm(&image);
+    }
+    println!(
+        "{}",
+        image.visible_board.board.iter().filter(|&&lit| lit).count()
+    );
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1737,17 +1847,39 @@ fn parse_day(day: &str) -> Result<u8, Box<dyn std::error::Error>> {
     }
 }
 
+fn to_be_implemented(_: Part) {
+    println!("not yet implemented")
+}
+
 fn main() {
     let opt = Opt::from_args();
 
     let day_fns = [
-        day1, day2, day3, day4, day5, day6, day7, day8, day9, day10, day11, day12, day13, day14,
-        day15, day16, day17, day18,
+        day1,
+        day2,
+        day3,
+        day4,
+        day5,
+        day6,
+        day7,
+        day8,
+        day9,
+        day10,
+        day11,
+        day12,
+        day13,
+        day14,
+        day15,
+        day16,
+        day17,
+        day18,
+        to_be_implemented,
+        day20,
     ];
 
-    if let Some(day_fn) = day_fns.get((opt.day - 1) as usize) {
-        day_fn(opt.part);
-    } else {
-        println!("not yet implemented")
-    }
+    let day_fn = day_fns
+        .get((opt.day - 1) as usize)
+        .copied()
+        .unwrap_or(to_be_implemented);
+    day_fn(opt.part);
 }
