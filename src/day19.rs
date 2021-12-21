@@ -15,8 +15,10 @@ type Distance = i32;
 
 struct Region {
     beacons: HashSet<Vec3>,
-    pair_distances: HashMap<Distance, (usize, HashSet<Vec3>)>,
     scanner: Vec<Vec3>,
+    // Store map of all beacon-beacon distances in the region to involved beacons.
+    // Not needed, but speeds up the merge search.
+    pair_distances: HashMap<Distance, HashSet<Vec3>>,
 }
 
 // Needs to be rotationally symmetric.
@@ -27,7 +29,7 @@ fn metric(vec: Vec3) -> Distance {
 
 // For all pairs of beacons, compute their distances and create
 // a lookup map from distance to all beacons that have that distance to at least one other beacon
-fn pair_distances(beacons: &HashSet<Vec3>) -> HashMap<i32, (usize, HashSet<Vec3>)> {
+fn pair_distances(beacons: &HashSet<Vec3>) -> HashMap<i32, HashSet<Vec3>> {
     let mut distances = HashMap::default();
     for (b1, b2) in beacons
         .iter()
@@ -35,9 +37,7 @@ fn pair_distances(beacons: &HashSet<Vec3>) -> HashMap<i32, (usize, HashSet<Vec3>
         .filter(|(b1, b2)| b1 != b2)
     {
         let distance = metric(b1 - b2);
-        let (count, potential_beacons) =
-            distances.entry(distance).or_insert((0, HashSet::default()));
-        *count += 1;
+        let potential_beacons = distances.entry(distance).or_insert(HashSet::default());
         potential_beacons.insert(*b1);
         potential_beacons.insert(*b2);
     }
@@ -65,33 +65,34 @@ fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(RotMatrix, Vec3)> 
     // Optional optimization.
     // If there are at least 12 common beacons, then each of those common beacons must see 11 other beacons
     // that exist in both regions.
-    // That means, there are (12 choose 2) = 12 * 11 / 2 = 66 distances that must exist for both regions.
+    // That means, the only beacons which could be overlapping are those beacons
+    // that have pairwise distances in common with the other region.
     // These distances are rotation and offset independent. If they don't exist, we don't have to bother searching
     // for the right rotation and offset.
-    let iter = reg1
+    let candidates = reg1
         .pair_distances
         .iter()
-        .filter_map(|(dist, (occ1, candidates1))| {
-            let (occ2, candidates2) = reg2.pair_distances.get(&dist)?;
-            Some(((occ1, candidates1), (occ2, candidates2)))
+        .filter_map(|(dist, candidates1)| {
+            let candidates2 = reg2.pair_distances.get(&dist)?;
+            Some((candidates1, candidates2))
         });
-    if iter
-        .clone()
-        .map(|((occ1, _), (occ2, _))| std::cmp::min(occ1, occ2))
-        .sum::<usize>()
-        < 66
-    {
-        return None;
-    }
 
-    // get all beacons that share at least 12 distances to other beacons with the other region
+    // get all beacons that share a distance to other beacons with the other region
     let mut beacons1 = HashSet::default();
     let mut beacons2 = HashSet::default();
-    for ((_, candidates1), (_, candidates2)) in iter {
+    for (candidates1, candidates2) in candidates {
         beacons1.extend(candidates1.iter().copied());
         beacons2.extend(candidates2.iter().copied());
     }
 
+    // If there aren't at least 12 candidates now, there won't be 12 after rotating
+    if beacons1.len() < 12 || beacons2.len() < 12 {
+        return None;
+    }
+
+    // Now try all rotations to find out if one of them gives us >= 12 overlaps.
+    // This would also work with beacons1 = region1.beacons and same for region2
+    // but it's much slower that way.
     for rotation in &*ALL_ROTATIONS {
         let rotated_beacons2 = beacons2.iter().map(|b| rotation * b).collect_vec();
         for b2 in &rotated_beacons2 {
