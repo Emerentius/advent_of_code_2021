@@ -1,3 +1,5 @@
+use fnv::FnvHashMap as HashMap;
+
 use fnv::FnvHashSet as HashSet;
 
 use crate::{parse_num, Part};
@@ -9,10 +11,37 @@ type Num = i16;
 // point or difference
 type Vec3 = Vector3<Num>;
 type RotMatrix = Matrix3<Num>;
+type Distance = i32;
 
 struct Region {
     beacons: HashSet<Vec3>,
+    pair_distances: HashMap<Distance, (usize, HashSet<Vec3>)>,
     scanner: Vec<Vec3>,
+}
+
+// Needs to be rotationally symmetric.
+// Euclidean distance has fewer collisions than taxicab, but that one would work as well.
+fn metric(vec: Vec3) -> Distance {
+    vec.iter().copied().map(i32::from).map(|n| n * n).sum()
+}
+
+// For all pairs of beacons, compute their distances and create
+// a lookup map from distance to all beacons that have that distance to at least one other beacon
+fn pair_distances(beacons: &HashSet<Vec3>) -> HashMap<i32, (usize, HashSet<Vec3>)> {
+    let mut distances = HashMap::default();
+    for (b1, b2) in beacons
+        .iter()
+        .tuple_combinations()
+        .filter(|(b1, b2)| b1 != b2)
+    {
+        let distance = metric(b1 - b2);
+        let (count, potential_beacons) =
+            distances.entry(distance).or_insert((0, HashSet::default()));
+        *count += 1;
+        potential_beacons.insert(*b1);
+        potential_beacons.insert(*b2);
+    }
+    distances
 }
 
 static ALL_ROTATIONS: Lazy<Vec<RotMatrix>> = Lazy::new(|| {
@@ -33,10 +62,40 @@ static ALL_ROTATIONS: Lazy<Vec<RotMatrix>> = Lazy::new(|| {
 
 // Returns rotation and offset that moves reg2 onto reg1.
 fn find_merge_params(reg1: &Region, reg2: &Region) -> Option<(RotMatrix, Vec3)> {
+    // Optional optimization.
+    // If there are at least 12 common beacons, then each of those common beacons must see 11 other beacons
+    // that exist in both regions.
+    // That means, there are (12 choose 2) = 12 * 11 / 2 = 66 distances that must exist for both regions.
+    // These distances are rotation and offset independent. If they don't exist, we don't have to bother searching
+    // for the right rotation and offset.
+    let iter = reg1
+        .pair_distances
+        .iter()
+        .filter_map(|(dist, (occ1, candidates1))| {
+            let (occ2, candidates2) = reg2.pair_distances.get(&dist)?;
+            Some(((occ1, candidates1), (occ2, candidates2)))
+        });
+    if iter
+        .clone()
+        .map(|((occ1, _), (occ2, _))| std::cmp::min(occ1, occ2))
+        .sum::<usize>()
+        < 66
+    {
+        return None;
+    }
+
+    // get all beacons that share at least 12 distances to other beacons with the other region
+    let mut beacons1 = HashSet::default();
+    let mut beacons2 = HashSet::default();
+    for ((_, candidates1), (_, candidates2)) in iter {
+        beacons1.extend(candidates1.iter().copied());
+        beacons2.extend(candidates2.iter().copied());
+    }
+
     for rotation in &*ALL_ROTATIONS {
-        let rotated_beacons2 = reg2.beacons.iter().map(|b| rotation * b).collect_vec();
+        let rotated_beacons2 = beacons2.iter().map(|b| rotation * b).collect_vec();
         for b2 in &rotated_beacons2 {
-            for b1 in &reg1.beacons {
+            for b1 in &beacons1 {
                 let offset = b2 - b1;
                 let potentially_common_beacons = rotated_beacons2
                     .iter()
@@ -55,6 +114,7 @@ fn merge(mut reg1: Region, reg2: Region, rotation: RotMatrix, offset: Vec3) -> R
     let new_pos = |pos| rotation * pos - offset;
     reg1.beacons.extend(reg2.beacons.into_iter().map(new_pos));
     reg1.scanner.extend(reg2.scanner.into_iter().map(new_pos));
+    reg1.pair_distances = pair_distances(&reg1.beacons);
     reg1
 }
 
@@ -69,7 +129,12 @@ pub fn day19(part: Part) {
                 .map(|beacon| Vec3::from_iterator(beacon.split(',').map(|num| parse_num(num) as _)))
                 .collect();
             let scanner = vec![Vec3::zeros()];
-            Region { beacons, scanner }
+            let pair_distances = pair_distances(&beacons);
+            Region {
+                beacons,
+                scanner,
+                pair_distances,
+            }
         })
         .collect_vec();
 
