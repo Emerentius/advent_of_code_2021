@@ -13,7 +13,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 
 #[cfg(test)]
 mod day18;
@@ -1836,6 +1836,92 @@ fn day20(part: Part) {
     );
 }
 
+fn day21(part: Part) {
+    let input = include_str!("day21_input.txt");
+    let get_num = |line: &str| parse_num(line.split(' ').last().unwrap());
+    let mut positions = input.lines().map(get_num).map(|n| n - 1).collect_vec();
+
+    match part {
+        Part::One => {
+            let mut scores = vec![0; positions.len()];
+
+            let mut die_roll = 1;
+            let mut n_rolls = 0;
+            'game: loop {
+                for (pos, score) in izip!(&mut positions, &mut scores) {
+                    for _ in 0..3 {
+                        n_rolls += 1;
+                        *pos = (*pos + die_roll) % 10;
+                        die_roll = if die_roll == 100 { 1 } else { die_roll + 1 };
+                    }
+                    *score += *pos + 1;
+
+                    if *score >= 1000 {
+                        break 'game;
+                    }
+                }
+            }
+            println!("{}", n_rolls * scores.into_iter().min().unwrap());
+        }
+        Part::Two => {
+            // Manual dynamic programming.
+            // Keep track of all possible states after each round for both players.
+            // 20 + 10 is the max reachable score
+            // I need an easier way of keeping track of all this state...
+            // Maybe matrices or just a recursive solution + caching.
+
+            let zero_poss = [[[0u64; 10]; 31]; 2];
+            // scores[n_rolls][player][score][current_field]
+            let mut scores = vec![zero_poss];
+            scores[0][0][0][positions[0] as usize] = 1;
+            scores[0][1][0][positions[1] as usize] = 1;
+
+            let mut n_possibilities_three_die_rolls = [0; 10];
+            for (d1, d2, d3) in itertools::iproduct!(1..4, 1..4, 1..4) {
+                n_possibilities_three_die_rolls[d1 + d2 + d3] += 1;
+            }
+
+            // Either player must have won after this many rounds.
+            // The bound can probably be lowered.
+            for round in 0..22 {
+                let prev_scores = &scores[round];
+                let mut next_scores = zero_poss;
+                for player in 0..2_usize {
+                    for prev_score in 0..21_usize {
+                        for prev_field in 0..10_usize {
+                            for (die_roll, &n_poss) in
+                                n_possibilities_three_die_rolls.iter().enumerate()
+                            {
+                                let next_field = (prev_field + die_roll) % 10;
+                                let next_score = prev_score + (next_field + 1);
+                                next_scores[player][next_score][next_field] +=
+                                    prev_scores[player][prev_score][prev_field] * n_poss;
+                            }
+                        }
+                    }
+                }
+
+                scores.push(next_scores);
+            }
+
+            let mut n_wins = [0; 2];
+            for (round, results) in scores.iter().enumerate().skip(1) {
+                for (player, results) in results.iter().enumerate() {
+                    let previous_results = match player {
+                        0 => scores[round - 1][1],
+                        1 => scores[round][0],
+                        _ => unreachable!(),
+                    };
+                    let n_not_won_other_player: u64 = previous_results[..21].iter().flatten().sum();
+                    let n_won_self: u64 = results[21..].iter().flatten().sum();
+                    n_wins[player] += n_not_won_other_player * n_won_self;
+                }
+            }
+            println!("{}", std::cmp::max(n_wins[0], n_wins[1]));
+        }
+    }
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1878,6 +1964,7 @@ fn main() {
         day18,
         day19::day19,
         day20,
+        day21,
     ];
 
     let day_fn = day_fns
