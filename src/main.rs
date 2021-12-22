@@ -4,7 +4,7 @@
 use nom::IResult;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::Add;
+use std::ops::{Add, RangeInclusive};
 use std::str::FromStr;
 use std::{
     cmp::{max, min, Reverse},
@@ -1922,6 +1922,179 @@ fn day21(part: Part) {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Region {
+    on: bool,
+    prio: usize,
+    space: Space,
+}
+
+impl Region {
+    fn without(&self, space: &Space) -> impl Iterator<Item = Self> + '_ {
+        self.space.without(&space).map(|space| Self {
+            space,
+            ..self.clone()
+        })
+    }
+}
+
+type Range = RangeInclusive<i64>;
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Space {
+    x: Range,
+    y: Range,
+    z: Range,
+}
+
+impl Space {
+    fn overlap(&self, other: &Self) -> Option<Self> {
+        Some(Space {
+            x: Self::range_overlap(&self.x, &other.x)?,
+            y: Self::range_overlap(&self.y, &other.y)?,
+            z: Self::range_overlap(&self.z, &other.z)?,
+        })
+    }
+
+    fn without(&self, other: &Self) -> impl Iterator<Item = Self> {
+        let (below_x, above_x) = Self::ranges_above_below(&self.x, &other.x);
+        let (below_y, above_y) = Self::ranges_above_below(&self.y, &other.y);
+        let (below_z, above_z) = Self::ranges_above_below(&self.z, &other.z);
+
+        [
+            Space {
+                x: below_x,
+                ..self.clone()
+            },
+            Space {
+                x: above_x,
+                ..self.clone()
+            },
+            Space {
+                x: other.x.clone(),
+                y: below_y,
+                z: self.z.clone(),
+            },
+            Space {
+                x: other.x.clone(),
+                y: above_y,
+                z: self.z.clone(),
+            },
+            Space {
+                z: below_z,
+                ..other.clone()
+            },
+            Space {
+                z: above_z,
+                ..other.clone()
+            },
+        ]
+        .into_iter()
+        .filter(|space| !space.is_empty())
+    }
+
+    fn volume(&self) -> usize {
+        self.x.clone().count() * self.y.clone().count() * self.z.clone().count()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.x.is_empty() || self.y.is_empty() || self.z.is_empty()
+    }
+
+    fn range_overlap(rg1: &Range, rg2: &Range) -> Option<Range> {
+        let overlap = max(*rg1.start(), *rg2.start())..=min(*rg1.end(), *rg2.end());
+        (!overlap.is_empty()).then(|| overlap)
+    }
+
+    fn ranges_above_below(rg1: &Range, rg2: &Range) -> (Range, Range) {
+        (Self::range_below(rg1, rg2), Self::range_above(rg1, rg2))
+    }
+
+    fn range_below(rg1: &Range, rg2: &Range) -> Range {
+        *rg1.start()..=min(*rg1.end(), *rg2.start() - 1)
+    }
+
+    fn range_above(rg1: &Range, rg2: &Range) -> Range {
+        max(*rg1.start(), *rg2.end() + 1)..=*rg1.end()
+    }
+}
+
+fn day22(part: Part) {
+    let input = include_str!("day22_input.txt");
+    let parse_range = |rg: &str| {
+        let (start, end) = rg.split_once("..").unwrap();
+        parse_num(start)..=parse_num(end)
+    };
+    let regions = input.lines().enumerate().map(|(i, line)| {
+        let (setting, region) = line.split_once(' ').unwrap();
+        let mut it = region.split(',').map(|rg| &rg[2..]).map(parse_range);
+        let mut next = || it.next().unwrap();
+        Region {
+            on: setting == "on",
+            prio: i,
+            space: Space {
+                x: next(),
+                y: next(),
+                z: next(),
+            },
+        }
+    });
+
+    let mut regions = regions.collect_vec();
+
+    if part == Part::One {
+        let inner_cube = Space {
+            x: -50..=50,
+            y: -50..=50,
+            z: -50..=50,
+        };
+        regions.retain(|r| r.space.overlap(&inner_cube).is_some());
+    }
+
+    // Go through all pairs of regions (rectangular cuboids) and check if they overlap.
+    // If so, take them apart into new, non-overlapping regions and the overlap region.
+    // The region that came later in the input sets the values for the overlap.
+    //
+    // There is a lot of optimization potential here. If we were to sort the list of spaces
+    // lexicographically (x,y,z), we could very easily rule out most other regions as potential
+    // overlapping regions.
+    for i in 0.. {
+        if i >= regions.len() {
+            break;
+        }
+        // for the `i`th region, check against all other regions after it until we find an overlap
+        // and then remove that overlap by introducing new regions.
+        // Repeat until no more overlaps exist.
+        //
+        // The regions in the growing range of 0..i don't have any pairwise overlaps afterwards.
+        'other: loop {
+            for j in i + 1..regions.len() {
+                if let Some(overlap) = regions[i].space.overlap(&regions[j].space) {
+                    let reg2 = regions.swap_remove(j);
+                    let reg1 = regions.swap_remove(i);
+
+                    regions.extend(reg1.without(&overlap));
+                    regions.extend(reg2.without(&overlap));
+
+                    let prio_reg = if reg1.prio > reg2.prio { reg1 } else { reg2 };
+                    regions.push(Region {
+                        space: overlap,
+                        ..prio_reg.clone()
+                    });
+                    continue 'other;
+                }
+            }
+            break;
+        }
+    }
+
+    let n_on = regions
+        .into_iter()
+        .filter(|r| r.on)
+        .map(|r| r.space.volume())
+        .sum::<usize>();
+    println!("{}", n_on);
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -1965,6 +2138,7 @@ fn main() {
         day19::day19,
         day20,
         day21,
+        day22,
     ];
 
     let day_fn = day_fns
