@@ -2,6 +2,7 @@
 #![feature(stmt_expr_attributes)]
 
 use nom::IResult;
+use std::collections::VecDeque;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Add, RangeInclusive};
@@ -1925,7 +1926,6 @@ fn day21(part: Part) {
 #[derive(Clone, Debug)]
 struct Region {
     on: bool,
-    prio: usize,
     space: Space,
 }
 
@@ -2024,67 +2024,59 @@ fn day22(part: Part) {
         let (start, end) = rg.split_once("..").unwrap();
         parse_num(start)..=parse_num(end)
     };
-    let regions = input.lines().enumerate().map(|(i, line)| {
+    let input_regions = input.lines().map(|line| {
         let (setting, region) = line.split_once(' ').unwrap();
         let mut it = region.split(',').map(|rg| &rg[2..]).map(parse_range);
         let mut next = || it.next().unwrap();
-        Region {
-            on: setting == "on",
-            prio: i,
-            space: Space {
-                x: next(),
-                y: next(),
-                z: next(),
+        (
+            None,
+            Region {
+                on: setting == "on",
+                space: Space {
+                    x: next(),
+                    y: next(),
+                    z: next(),
+                },
             },
-        }
+        )
     });
 
-    let mut regions = regions.collect_vec();
-
+    let mut input_regions = input_regions.collect::<VecDeque<_>>();
     if part == Part::One {
         let inner_cube = Space {
             x: -50..=50,
             y: -50..=50,
             z: -50..=50,
         };
-        regions.retain(|r| r.space.overlap(&inner_cube).is_some());
+        input_regions.retain(|(_, r)| r.space.overlap(&inner_cube).is_some());
     }
 
-    // Go through all pairs of regions (rectangular cuboids) and check if they overlap.
+    // For each input region, go through all previously seen regions and check if they overlap.
     // If so, take them apart into new, non-overlapping regions and the overlap region.
-    // The region that came later in the input sets the values for the overlap.
-    //
-    // There is a lot of optimization potential here. If we were to sort the list of spaces
-    // lexicographically (x,y,z), we could very easily rule out most other regions as potential
-    // overlapping regions.
-    for i in 0.. {
-        if i >= regions.len() {
-            break;
-        }
-        // for the `i`th region, check against all other regions after it until we find an overlap
-        // and then remove that overlap by introducing new regions.
-        // Repeat until no more overlaps exist.
-        //
-        // The regions in the growing range of 0..i don't have any pairwise overlaps afterwards.
-        'other: loop {
-            for j in i + 1..regions.len() {
-                if let Some(overlap) = regions[i].space.overlap(&regions[j].space) {
-                    let reg2 = regions.swap_remove(j);
-                    let reg1 = regions.swap_remove(i);
+    // The non-overlapping parts of the input region still have to be checked against all the other
+    // regions in the set of non-overlapping regions.
+    let mut regions: Vec<Region> = vec![];
+    // For a new input region, `start` is initially 0.
+    // If an overlap is found, the remaining parts are reinserted into the queue with `start` == the last seen index.
+    // If the large cuboid didn't overlap any region up to that point, its pieces won't overlap either.
+    'outer: while let Some((start, new_region)) = input_regions.pop_front() {
+        for i in start.unwrap_or(0)..regions.len() {
+            if let Some(overlap) = new_region.space.overlap(&regions[i].space) {
+                let overlap_region = Region {
+                    space: overlap.clone(),
+                    ..new_region
+                };
+                let old_region = std::mem::replace(&mut regions[i], overlap_region);
 
-                    regions.extend(reg1.without(&overlap));
-                    regions.extend(reg2.without(&overlap));
-
-                    let prio_reg = if reg1.prio > reg2.prio { reg1 } else { reg2 };
-                    regions.push(Region {
-                        space: overlap,
-                        ..prio_reg.clone()
-                    });
-                    continue 'other;
+                for new_region_remainder in new_region.without(&overlap) {
+                    input_regions.push_front((Some(i), new_region_remainder));
                 }
+                regions.extend(old_region.without(&overlap));
+                continue 'outer;
             }
-            break;
         }
+        // no overlap found, just add the new region
+        regions.push(new_region);
     }
 
     let n_on = regions
