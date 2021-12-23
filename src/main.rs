@@ -2,7 +2,6 @@
 #![feature(stmt_expr_attributes)]
 
 use nom::IResult;
-use std::collections::VecDeque;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Add, RangeInclusive};
@@ -1930,11 +1929,11 @@ struct Region {
 }
 
 impl Region {
-    fn without(&self, space: &Space) -> impl Iterator<Item = Self> + '_ {
-        self.space.without(&space).map(|space| Self {
-            space,
-            ..self.clone()
-        })
+    fn without(&self, space: &Space) -> impl Iterator<Item = Self> {
+        let s = self.clone();
+        self.space
+            .without(&space)
+            .map(move |space| Self { space, ..s.clone() })
     }
 }
 
@@ -2028,55 +2027,44 @@ fn day22(part: Part) {
         let (setting, region) = line.split_once(' ').unwrap();
         let mut it = region.split(',').map(|rg| &rg[2..]).map(parse_range);
         let mut next = || it.next().unwrap();
-        (
-            None,
-            Region {
-                on: setting == "on",
-                space: Space {
-                    x: next(),
-                    y: next(),
-                    z: next(),
-                },
+        Region {
+            on: setting == "on",
+            space: Space {
+                x: next(),
+                y: next(),
+                z: next(),
             },
-        )
+        }
     });
 
-    let mut input_regions = input_regions.collect::<VecDeque<_>>();
+    let mut input_regions = input_regions.collect::<Vec<_>>();
     if part == Part::One {
         let inner_cube = Space {
             x: -50..=50,
             y: -50..=50,
             z: -50..=50,
         };
-        input_regions.retain(|(_, r)| r.space.overlap(&inner_cube).is_some());
+        input_regions.retain(|r| r.space.overlap(&inner_cube).is_some());
     }
 
     // For each input region, go through all previously seen regions and check if they overlap.
-    // If so, take them apart into new, non-overlapping regions and the overlap region.
-    // The non-overlapping parts of the input region still have to be checked against all the other
-    // regions in the set of non-overlapping regions.
+    // If they do, cut up the previous region and add the non-overlapping parts back.
+    // Add the input region unchanged, if it's on.
+    // This way, `regions` only contains active regions (== set to on) and the input isn't needlessly
+    // cut up into many sub-regions that would each need to be rechecked for the next input region.
     let mut regions: Vec<Region> = vec![];
-    // For a new input region, `start` is initially 0.
-    // If an overlap is found, the remaining parts are reinserted into the queue with `start` == the last seen index.
-    // If the large cuboid didn't overlap any region up to that point, its pieces won't overlap either.
-    'outer: while let Some((start, new_region)) = input_regions.pop_front() {
-        for i in start.unwrap_or(0)..regions.len() {
-            if let Some(overlap) = new_region.space.overlap(&regions[i].space) {
-                let overlap_region = Region {
-                    space: overlap.clone(),
-                    ..new_region
-                };
-                let old_region = std::mem::replace(&mut regions[i], overlap_region);
-
-                for new_region_remainder in new_region.without(&overlap) {
-                    input_regions.push_front((Some(i), new_region_remainder));
-                }
-                regions.extend(old_region.without(&overlap));
-                continue 'outer;
+    for new_region in input_regions {
+        for i in (0..regions.len()).rev() {
+            let old_region = &regions[i];
+            if let Some(overlap) = new_region.space.overlap(&old_region.space) {
+                let non_overlapping_regions = old_region.without(&overlap);
+                regions.swap_remove(i);
+                regions.extend(non_overlapping_regions);
             }
         }
-        // no overlap found, just add the new region
-        regions.push(new_region);
+        if new_region.on {
+            regions.push(new_region);
+        }
     }
 
     let n_on = regions
