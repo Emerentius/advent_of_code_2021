@@ -1,0 +1,73 @@
+Attempt: Clear Room 3 first
+This doesn't minimize D movement, but trades 2 extra moves of one D
+for not moving the Cs into the corners of the hallway, saving ~2300 energy for net savings of ~300.
+45272 energy.
+
+// Clear Room 3
+#############
+#...........#
+###D#A#B#C###
+  #D#C#B#A#
+  #D#B#A#C#
+  #B#A#D#C#
+  #########
+
+// Move Cs Room 4 into Room 3 and the A into the free place in the hallway
+#############
+#BB...D....A#
+###D#A#.#C###
+  #D#C#.#A#
+  #D#B#.#C#
+  #B#A#.#C#
+  #########
+
+
+// Move Ds into Room 4
+#############
+#BB...D...AA#
+###D#A#.#.###
+  #D#C#C#.#
+  #D#B#C#.#
+  #B#A#C#.#
+  #########
+
+// Move A out of Room 2 into the hallway between Room 3 and 4
+// and fill up room 3 with C from room 2
+#############
+#BB.......AA#
+###.#A#.#D###
+  #.#C#C#D#
+  #.#B#C#D#
+  #B#A#C#D#
+  #########
+
+// Clear Room 2
+#############
+#BB.....A.AA#
+###.#.#C#D###
+  #.#.#C#D#
+  #.#B#C#D#
+  #B#A#C#D#
+  #########
+
+// fill room 2 first, then room 1
+#############
+#BB.B.A.A.AA#
+###.#.#C#D###
+  #.#.#C#D#
+  #.#.#C#D#
+  #B#.#C#D#
+  #########
+
+// Done. 45272 energy
+#############
+#...........#
+###A#B#C#D###
+  #A#B#C#D#
+  #A#B#C#D#
+  #A#B#C#D#
+  #########
+
+
+
+

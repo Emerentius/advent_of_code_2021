@@ -2075,6 +2075,10 @@ fn day22(part: Part) {
     println!("{}", n_on);
 }
 
+fn day23(_: Part) {
+    println!("See solution description in src/day23_part_X_solution.txt");
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -2119,6 +2123,7 @@ fn main() {
         day20,
         day21,
         day22,
+        day23,
     ];
 
     let day_fn = day_fns
