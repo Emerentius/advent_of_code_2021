@@ -1026,6 +1026,23 @@ impl Display for Board<bool> {
     }
 }
 
+impl Display for Board<Option<Direction>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for y in 0..self.n_rows() {
+            for x in 0..self.n_cols() {
+                let print_ch = match self[(x, y)] {
+                    Some(Direction::East) => '>',
+                    Some(Direction::South) => 'v',
+                    None => '.',
+                };
+                write!(f, "{}", print_ch)?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
 fn day13(part: Part) {
     fn fold_coordinate(pos: usize, fold_coordinate: usize) -> Option<usize> {
         (pos != fold_coordinate).then(|| {
@@ -2198,6 +2215,60 @@ fn day24(part: Part) {
     println!("{}", num);
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+enum Direction {
+    East,
+    South,
+}
+
+fn day25(_part: Part) {
+    use Direction::*;
+    let input = include_str!("day25_input.txt");
+    let mut board = Board::from_str(input, |ch| match ch {
+        '>' => Some(East),
+        'v' => Some(South),
+        '.' => None,
+        _ => unreachable!(),
+    });
+
+    let advance = |board: &mut Board<_>| {
+        let mut any_moved = false;
+
+        let iter: [(_, fn(_, _, _, _) -> _); 2] = [
+            (East, |x, y, n_cols, _| ((x + 1) % n_cols, y)),
+            (South, |x, y, _, n_rows| (x, (y + 1) % n_rows)),
+        ];
+
+        for (facing, next_cell) in iter {
+            let mut next_board = Board::new(None, board.n_rows(), board.n_cols());
+            for (x, y) in board.cells() {
+                match board[(x, y)] {
+                    Some(dir) => {
+                        let next_cell = next_cell(x, y, board.n_cols(), board.n_rows());
+                        if dir == facing && board[next_cell].is_none() {
+                            next_board[next_cell] = Some(dir);
+                            any_moved = true;
+                        } else {
+                            next_board[(x, y)] = Some(dir);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            *board = next_board;
+        }
+        any_moved
+    };
+
+    let mut n_steps = 0;
+    while advance(&mut board) {
+        n_steps += 1;
+    }
+    // The loop is counting the number of steps where something actually moves.
+    // AoC still counts the last step on which nothing moves as a step during which the sea cucumbers move, so + 1.
+    println!("{}", n_steps + 1);
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -2244,6 +2315,7 @@ fn main() {
         day22,
         day23,
         day24,
+        day25,
     ];
 
     let day_fn = day_fns
