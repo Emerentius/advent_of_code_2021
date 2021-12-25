@@ -1,0 +1,92 @@
+{
+    "0": [
+        "mul x 0"
+    ],
+    "1": [
+        "add x z"
+    ],
+    "2": [
+        "mod x 26"
+    ],
+    "3": [
+        "div z 1",
+        "div z 1",
+        "div z 1",
+        "div z 26",
+        "div z 26",
+        "div z 1",
+        "div z 26",
+        "div z 26",
+        "div z 1",
+        "div z 1",
+        "div z 26",
+        "div z 1",
+        "div z 26",
+        "div z 26"
+    ],
+    "4": [
+        "add x 12",
+        "add x 13",
+        "add x 13",
+        "add x -2",
+        "add x -10",
+        "add x 13",
+        "add x -14",
+        "add x -5",
+        "add x 15",
+        "add x 15",
+        "add x -14",
+        "add x 10",
+        "add x -14",
+        "add x -5"
+    ],
+    "5": [
+        "eql x w"
+    ],
+    "6": [
+        "eql x 0"
+    ],
+    "7": [
+        "mul y 0"
+    ],
+    "8": [
+        "add y 25"
+    ],
+    "9": [
+        "mul y x"
+    ],
+    "10": [
+        "add y 1"
+    ],
+    "11": [
+        "mul z y"
+    ],
+    "12": [
+        "mul y 0"
+    ],
+    "13": [
+        "add y w"
+    ],
+    "14": [
+        "add y 7",
+        "add y 8",
+        "add y 10",
+        "add y 4",
+        "add y 4",
+        "add y 6",
+        "add y 11",
+        "add y 13",
+        "add y 1",
+        "add y 8",
+        "add y 4",
+        "add y 13",
+        "add y 4",
+        "add y 14"
+    ],
+    "15": [
+        "mul y x"
+    ],
+    "16": [
+        "add z y"
+    ]
+}

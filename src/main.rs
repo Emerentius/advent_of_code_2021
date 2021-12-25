@@ -2079,6 +2079,125 @@ fn day23(_: Part) {
     println!("See solution description in src/day23_part_X_solution.txt");
 }
 
+#[derive(Copy, Clone)]
+enum DigitRule {
+    Free { min: i8, max: i8 },
+    // Must be equal to digit[pos] + offset
+    // where pos starts at 0 at the most significant digit
+    Bound { pos: usize, offset: i8 },
+}
+
+fn deduce_digit_rules(
+    x_offsets: [i8; 14],
+    y_offsets: [i8; 14],
+    z_divs: [i8; 14],
+) -> [DigitRule; 14] {
+    // The input program can be simplified to this equivalent rust code
+    //
+    // let mut z = 0;
+    // for (i, digit) in digits(num).enumerate() { // most to least significant
+    //     let x = (z % 26 + x_offsets[i]) != digit
+    //     z = z / z_divs[i]
+    //     if x {
+    //         z = 26 * z + digit + y_offsets[i]
+    //     }
+    // }
+    //
+    // where x_offsets, y_offsets and z_divs are all arrays that have the same
+    // values as the program does in certain instructions.
+    // Those the only places where the program differs between digits.
+    //
+    // The values in those offsets are chosen such that the algorithm is effectively
+    // operating a stack.
+    // Whenever x_offsets[i] > 10, the check cannot succeed and z is increased by the digit + an offset. For all of those digits z_divs == 1, so z isn't decreased.
+    // Whenever x_offsets[i] < 0, z_divs == 26. z is decreased, but only after
+    // extracting the last pushed digit + an offset. The previous digit + the offset
+    // must match the current digit or else z is increased again.
+    //
+    // Exactly half the steps force an increase (== push a digit + offset to the stack)
+    // and half decrease z and do a check. If the check fails, z is increased
+    // again and the final check will fail.
+    // So every time a check is done, we can deduce the allowed range for the digits.
+    // I first solved part 1 by hand but didn't want to repeat that for part 2.
+    let mut stack = vec![];
+    let mut digit_rules = [DigitRule::Free { min: 1, max: 9 }; 14];
+    for (digit_pos, (x_offset, y_offset, z_div)) in
+        itertools::izip!(x_offsets, y_offsets, z_divs).enumerate()
+    {
+        match z_div {
+            // push digit + offset to stack
+            1 => {
+                assert!(x_offset > 0);
+                stack.push((digit_pos, y_offset));
+            }
+            // check against last pushed digit + offset
+            26 => {
+                assert!(x_offset < 10);
+                // digit[digit_pos] == digit[old_digit_pos] + old_y_offset + x_offset
+                let (old_digit_pos, old_y_offset) = stack.pop().unwrap();
+                let offset: i8 = old_y_offset + x_offset;
+                assert!(offset.abs() <= 8);
+                if offset > 0 {
+                    digit_rules[old_digit_pos] = DigitRule::Free {
+                        min: 1,
+                        max: 9 - offset,
+                    };
+                } else {
+                    digit_rules[old_digit_pos] = DigitRule::Free {
+                        min: 1 - offset,
+                        max: 9,
+                    };
+                }
+                digit_rules[digit_pos] = DigitRule::Bound {
+                    pos: old_digit_pos,
+                    offset,
+                };
+            }
+            _ => unreachable!(),
+        }
+    }
+    assert!(stack.is_empty());
+
+    digit_rules
+}
+
+fn extract_program_parameters(program: &str) -> ([i8; 14], [i8; 14], [i8; 14]) {
+    // I initially extracted the parameters for my input by hand from the output of day24.py
+    let mut x_offsets = [0; 14];
+    let mut y_offsets = [0; 14];
+    let mut z_divs = [0; 14];
+
+    let extract_2nd_arg = |line: &str| parse_num(line.split(' ').last().unwrap()) as i8;
+
+    for (i, digit_program) in program.split("inp w\n").skip(1).enumerate() {
+        let instructions = digit_program.lines().collect_vec();
+        z_divs[i] = extract_2nd_arg(instructions[3]);
+        x_offsets[i] = extract_2nd_arg(instructions[4]);
+        y_offsets[i] = extract_2nd_arg(instructions[14]);
+    }
+
+    (x_offsets, y_offsets, z_divs)
+}
+
+fn day24(part: Part) {
+    let program = include_str!("day24_input.txt");
+    let (x_offs, y_offs, z_divs) = extract_program_parameters(program);
+    let rules = deduce_digit_rules(x_offs, y_offs, z_divs);
+
+    let mut digits = [0; 14];
+    for (i, rule) in rules.into_iter().enumerate() {
+        match rule {
+            DigitRule::Free { min, max } => {
+                digits[i] = if part == Part::One { max } else { min };
+            }
+            DigitRule::Bound { pos, offset } => digits[i] = digits[pos] + offset,
+        }
+    }
+
+    let num = digits_to_num(digits.into_iter().map(|d| d as _));
+    println!("{}", num);
+}
+
 #[derive(StructOpt)]
 struct Opt {
     #[structopt(parse(try_from_str = parse_day))]
@@ -2124,6 +2243,7 @@ fn main() {
         day21,
         day22,
         day23,
+        day24,
     ];
 
     let day_fn = day_fns
